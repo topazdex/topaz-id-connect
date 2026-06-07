@@ -14,13 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No registry-url: it would write an .npmrc with an empty NODE_AUTH_TOKEN
+      # that shadows the OIDC token exchange. OIDC uses the default registry.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          registry-url: "https://registry.npmjs.org"
 
       # Trusted publishing (OIDC) requires npm >= 11.5.1
       - run: npm install -g npm@latest
+      - run: npm --version
 
       - run: corepack enable
       - run: yarn install --immutable
