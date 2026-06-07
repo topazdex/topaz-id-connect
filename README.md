@@ -10,6 +10,12 @@ Your app is the *requester* and references Topaz ID's public app id — that's t
 whole integration. You don't need a Privy account, and your domain does **not**
 need to be allowlisted by Topaz ID.
 
+## Demo
+
+See it live: **[topaz-id-demo.vercel.app](https://topaz-id-demo.vercel.app)** — a
+Next.js + RainbowKit app demonstrating connect, profile display, and signing.
+Source: [topazdex/topaz-id-connect-demo](https://github.com/topazdex/topaz-id-connect-demo).
+
 ## Install
 
 ```bash
