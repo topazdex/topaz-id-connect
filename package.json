@@ -1,0 +1,96 @@
+{
+  "name": "@topazdex/id-connect",
+  "version": "0.1.0",
+  "description": "Add Topaz ID — a BNB Chain global wallet — to your dapp in one line.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "packageManager": "yarn@4.12.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/topazdex/topaz-id-connect.git"
+  },
+  "bugs": {
+    "url": "https://github.com/topazdex/topaz-id-connect/issues"
+  },
+  "homepage": "https://id.topazdex.com/developers",
+  "keywords": [
+    "topaz",
+    "topaz-id",
+    "privy",
+    "global-wallet",
+    "cross-app",
+    "wagmi",
+    "rainbowkit",
+    "bnb-chain",
+    "wallet"
+  ],
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./rainbow-kit": {
+      "types": "./dist/rainbow-kit.d.ts",
+      "import": "./dist/rainbow-kit.js",
+      "require": "./dist/rainbow-kit.cjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js",
+      "require": "./dist/react.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "yarn build"
+  },
+  "peerDependencies": {
+    "@privy-io/cross-app-connect": "^0.5.0",
+    "@rainbow-me/rainbowkit": "^2.2.3",
+    "@tanstack/react-query": "^5",
+    "react": "^18 || ^19",
+    "viem": "^2",
+    "wagmi": "^2"
+  },
+  "peerDependenciesMeta": {
+    "@rainbow-me/rainbowkit": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "viem": {
+      "optional": true
+    },
+    "wagmi": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@privy-io/cross-app-connect": "^0.5.12",
+    "@rainbow-me/rainbowkit": "^2.2.3",
+    "@tanstack/react-query": "^5.59.0",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "viem": "2.52.0",
+    "wagmi": "^2.14.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
