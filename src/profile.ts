@@ -29,19 +29,29 @@ export interface FetchTopazIdProfileOptions {
 
 /**
  * Fetch a wallet's public Topaz ID profile. Reads are public and CORS-open — no
- * auth, no signature. Returns `null` on a network/HTTP failure; a wallet with no
- * profile resolves to an object with `found: false`.
+ * auth, no signature. Returns `null` on a network or HTTP failure; a wallet with
+ * no profile resolves to an object with `found: false`. Aborts (from `signal`)
+ * re-throw so React Query can distinguish a cancellation from an empty result.
+ *
+ * @example
+ * const profile = await fetchTopazIdProfile("0xabc…");
+ * if (profile?.found) console.log(profile.handle);
  */
 export async function fetchTopazIdProfile(
   wallet: string,
   options: FetchTopazIdProfileOptions = {},
 ): Promise<TopazIdProfile | null> {
   const base = options.baseUrl ?? TOPAZ_ID_BASE_URL;
-  const res = await fetch(`${base}/api/v1/profile/${wallet}`, {
-    signal: options.signal,
-  });
-  if (!res.ok) return null;
-  return (await res.json()) as TopazIdProfile;
+  try {
+    const res = await fetch(`${base}/api/v1/profile/${wallet}`, {
+      signal: options.signal,
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as TopazIdProfile;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    return null;
+  }
 }
 
 export function shortenAddress(wallet: string): string {

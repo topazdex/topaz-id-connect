@@ -1,7 +1,13 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/rainbow-kit.ts", "src/react.ts"],
+  entry: [
+    "src/index.ts",
+    "src/connectors.ts",
+    "src/rainbow-kit.ts",
+    "src/react.tsx",
+    "src/privy.tsx",
+  ],
   format: ["esm", "cjs"],
   dts: true,
   clean: true,
@@ -9,6 +15,7 @@ export default defineConfig({
   treeshake: true,
   external: [
     "@privy-io/cross-app-connect",
+    "@privy-io/react-auth",
     "@rainbow-me/rainbowkit",
     "@tanstack/react-query",
     "react",

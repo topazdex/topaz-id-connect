@@ -1,10 +1,29 @@
 {
   "name": "@topazdex/id-connect",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Add Topaz ID — a BNB Chain global wallet — to your dapp in one line.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "connectors": [
+        "./dist/connectors.d.ts"
+      ],
+      "rainbow-kit": [
+        "./dist/rainbow-kit.d.ts"
+      ],
+      "react": [
+        "./dist/react.d.ts"
+      ],
+      "privy": [
+        "./dist/privy.d.ts"
+      ]
+    }
+  },
   "packageManager": "yarn@4.12.0",
   "engines": {
     "node": ">=18"
@@ -29,33 +48,73 @@
     "wallet"
   ],
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./connectors": {
+      "import": {
+        "types": "./dist/connectors.d.ts",
+        "default": "./dist/connectors.js"
+      },
+      "require": {
+        "types": "./dist/connectors.d.cts",
+        "default": "./dist/connectors.cjs"
+      }
     },
     "./rainbow-kit": {
-      "types": "./dist/rainbow-kit.d.ts",
-      "import": "./dist/rainbow-kit.js",
-      "require": "./dist/rainbow-kit.cjs"
+      "import": {
+        "types": "./dist/rainbow-kit.d.ts",
+        "default": "./dist/rainbow-kit.js"
+      },
+      "require": {
+        "types": "./dist/rainbow-kit.d.cts",
+        "default": "./dist/rainbow-kit.cjs"
+      }
     },
     "./react": {
-      "types": "./dist/react.d.ts",
-      "import": "./dist/react.js",
-      "require": "./dist/react.cjs"
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    },
+    "./privy": {
+      "import": {
+        "types": "./dist/privy.d.ts",
+        "default": "./dist/privy.js"
+      },
+      "require": {
+        "types": "./dist/privy.d.cts",
+        "default": "./dist/privy.cjs"
+      }
     }
   },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:build": "publint --strict && attw --pack",
     "prepublishOnly": "yarn build"
   },
   "peerDependencies": {
     "@privy-io/cross-app-connect": "^0.5.0",
+    "@privy-io/react-auth": "^2 || ^3",
     "@rainbow-me/rainbowkit": "^2.2.3",
     "@tanstack/react-query": "^5",
     "react": "^18 || ^19",
@@ -63,6 +122,12 @@
     "wagmi": "^2"
   },
   "peerDependenciesMeta": {
+    "@privy-io/cross-app-connect": {
+      "optional": true
+    },
+    "@privy-io/react-auth": {
+      "optional": true
+    },
     "@rainbow-me/rainbowkit": {
       "optional": true
     },
@@ -80,14 +145,20 @@
     }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.3",
     "@privy-io/cross-app-connect": "^0.5.12",
+    "@privy-io/react-auth": "^3.30.0",
     "@rainbow-me/rainbowkit": "^2.2.3",
     "@tanstack/react-query": "^5.59.0",
     "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.3",
+    "publint": "^0.3.21",
     "react": "^19.0.0",
+    "react-dom": "^19.2.7",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
     "viem": "2.52.0",
+    "vitest": "^4.1.8",
     "wagmi": "^2.14.0"
   },
   "publishConfig": {
