@@ -238,6 +238,24 @@ All peers are optional; install only what your entrypoints use.
 | `useTopazIdProfile` only (`/react`) | `@tanstack/react-query`, `react` |
 | Privy cross-app (`/privy`) | `@privy-io/react-auth`, `react` |
 
+## Releasing
+
+Publishing is automated: `.github/workflows/publish.yml` runs on a **published
+GitHub Release** and `npm publish`es via OIDC trusted publishing (no token,
+provenance included). It does **not** publish on a push to `main` or a bare tag
+push — creating the Release is the trigger.
+
+1. Land changes on `main` (green CI).
+2. Bump `version` in `package.json` (semver).
+3. Commit `Release vX.Y.Z` and push.
+4. Create the Release — its tag (minus `v`) must equal `package.json#version`:
+   ```bash
+   gh release create vX.Y.Z --title vX.Y.Z --generate-notes
+   ```
+5. Watch the **Actions** tab, then confirm: `npm view @topazdex/id-connect version`.
+
+See [`CLAUDE.md`](CLAUDE.md) for the full process and gotchas.
+
 ## License
 
 MIT
