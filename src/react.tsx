@@ -23,6 +23,12 @@ export interface TopazIdProviderProps {
   children: ReactNode;
   /** Override Topaz ID's app id (e.g. to target a staging app). */
   appId?: string;
+  /**
+   * Expose the user's Topaz ID smart contract wallet as the connected account
+   * (default `true`). Set `false` for the legacy signer-EOA behavior. Forwarded to
+   * {@link topazIdConnector}.
+   */
+  smartWalletMode?: boolean;
   /** Custom RPC transport for BNB Chain. Defaults to a public `http()` endpoint. */
   transport?: Transport;
   /** Supply your own React Query client. One is created if omitted. */
@@ -56,6 +62,7 @@ export interface TopazIdProviderProps {
 export function TopazIdProvider({
   children,
   appId,
+  smartWalletMode,
   transport,
   queryClient,
   ssr = true,
@@ -66,14 +73,14 @@ export function TopazIdProvider({
       createConfig({
         chains: [TOPAZ_ID_CHAIN],
         transports: { [TOPAZ_ID_CHAIN.id]: transport ?? http() },
-        connectors: [topazIdConnector({ appId })],
+        connectors: [topazIdConnector({ appId, smartWalletMode })],
         ssr,
         storage: ssr
           ? createStorage({ storage: cookieStorage })
           : undefined,
         multiInjectedProviderDiscovery: false,
       }),
-    [appId, transport, ssr],
+    [appId, smartWalletMode, transport, ssr],
   );
 
   const initialState = useMemo(

@@ -1,9 +1,10 @@
 # @topazdex/id-connect
 
-Add **Topaz ID** — a self-custodial BNB Chain global wallet — to your dapp as a
+Add **Topaz ID** — a BNB Chain **smart-wallet** global account — to your dapp as a
 one-click login. Users sign in with their existing Topaz ID account
-([id.topazdex.com](https://id.topazdex.com)); no seed phrase, no extension, and
-**no Privy app of your own**.
+([id.topazdex.com](https://id.topazdex.com)) — email, Google, or an external wallet —
+and connect with their Topaz ID **smart contract wallet** (Kernel/ZeroDev). No seed
+phrase, no extension, and **no Privy app of your own**.
 
 Topaz ID is built on [Privy's global wallets](https://docs.privy.io/wallets/global-wallets/overview).
 Your app is the *requester* and references Topaz ID's public app id — that's the
@@ -15,6 +16,23 @@ need to be allowlisted by Topaz ID.
 See it live: **[topaz-id-demo.vercel.app](https://topaz-id-demo.vercel.app)** — a
 Next.js + RainbowKit app demonstrating connect, profile display, and signing.
 Source: [topazdex/topaz-id-connect-demo](https://github.com/topazdex/topaz-id-connect-demo).
+
+## Upgrading to 0.3.0
+
+`0.3.0` makes Topaz ID **smart-account-first**: the connected account is now the
+user's **smart contract wallet** (Kernel/ZeroDev) — their identity on
+id.topazdex.com — instead of the embedded signer EOA. Most apps need no code change
+(you already read `useAccount().address`), but note:
+
+- **The address changes.** `useAccount().address` is now the smart wallet, so
+  anything keyed on the old EOA (allowlists, prior balances) won't carry over.
+- **Sends are gas-sponsored UserOperations**, and **signatures are ERC-1271/6492,
+  not ECDSA** — see [Using the wallet](#using-the-wallet). Update SIWE/`ecrecover`
+  backends to an ERC-1271-aware check.
+- **Opt out:** pass `{ smartWalletMode: false }` to `topazIdConnector()`,
+  `topazIdWallet()`, or `TopazIdProvider` to keep the legacy signer-EOA behavior.
+
+`^0.2` consumers don't automatically cross the minor — you upgrade deliberately.
 
 ## Install
 
@@ -87,11 +105,12 @@ export function SignIn() {
 }
 ```
 
-`TopazIdProvider` accepts `appId` (target a staging app), `transport` (custom RPC),
-`queryClient` (bring your own), `ssr` (defaults to `true`, enabling wagmi cookie
-storage), and `cookie` (the request cookie header, so a connected wallet survives
-SSR without a flash). Draw the `"use client"` boundary in your app — the library
-stays framework-agnostic.
+`TopazIdProvider` accepts `appId` (target a staging app), `smartWalletMode`
+(defaults to `true`; pass `false` for the legacy signer-EOA), `transport` (custom
+RPC), `queryClient` (bring your own), `ssr` (defaults to `true`, enabling wagmi
+cookie storage), and `cookie` (the request cookie header, so a connected wallet
+survives SSR without a flash). Draw the `"use client"` boundary in your app — the
+library stays framework-agnostic.
 
 ## RainbowKit
 
@@ -139,20 +158,38 @@ export const wagmiConfig = createConfig({
 
 ## Using the wallet
 
-Once connected, Topaz ID is a standard EIP-1193 wallet. Use plain wagmi — **never**
-`@privy-io/react-auth` signing hooks (those are embedded-wallet-only and won't
-route through Topaz ID).
+Once connected, Topaz ID is a standard EIP-1193 wallet — use plain wagmi, **never**
+`@privy-io/react-auth` signing hooks (those are embedded-wallet-only and won't route
+through Topaz ID).
 
 ```ts
 import { useAccount, useSendTransaction } from "wagmi";
 import { parseEther } from "viem";
 
-const { address } = useAccount(); // the user's Topaz ID address
+const { address } = useAccount(); // the user's Topaz ID smart wallet
 
 const { sendTransactionAsync } = useSendTransaction();
 await sendTransactionAsync({ to, value: parseEther("0.01"), chainId: 56 });
 // Topaz ID pops a consent window; the user approves every action.
 ```
+
+The connected account is a **smart contract wallet** (Kernel/ZeroDev on BNB Chain),
+which differs from a plain EOA in two ways worth knowing:
+
+- **Sends are UserOperations relayed through Topaz ID.** `sendTransaction` /
+  `writeContract` are submitted via Topaz ID's bundler + paymaster — gas is
+  sponsored by Topaz ID's paymaster policy (so the user typically needs no BNB for
+  gas), and multiple calls (e.g. `approve` + swap) can batch into a single atomic
+  action.
+- **Signatures are ERC-1271 / ERC-6492, not ECDSA.** `personal_sign` and
+  `eth_signTypedData_v4` (wagmi's `useSignMessage` / `useSignTypedData`) return a
+  contract signature. If your backend verifies signatures (e.g. SIWE), use an
+  ERC-1271/6492-aware check — `viem`'s `verifyMessage` / `verifyTypedData` with a
+  BNB Chain public client — **not** `ecrecover`.
+
+> Need the legacy embedded **signer EOA** instead of the smart wallet? Pass
+> `{ smartWalletMode: false }` to `topazIdConnector()`, `topazIdWallet()`, or
+> `TopazIdProvider`. That address is signer-only — not where the user holds funds.
 
 ## Show the user's Topaz ID profile
 
@@ -203,18 +240,20 @@ const { login } = useTopazIdCrossAppLogin();
 <button onClick={login}>Continue with Topaz ID</button>;
 ```
 
-To read the linked Topaz ID address from the Privy user:
+To read the linked Topaz ID **smart wallet** address from the Privy user, use
+`useTopazIdAccount` — it returns the smart wallet as `address` (the identity to
+display and look up) and the embedded signer EOA separately:
 
 ```ts
-import { TOPAZ_ID_APP_ID } from "@topazdex/id-connect";
-import { usePrivy } from "@privy-io/react-auth";
+import { useTopazIdAccount } from "@topazdex/id-connect/privy";
 
-const { user } = usePrivy();
-const topaz = user?.linkedAccounts.find(
-  (a) => a.type === "cross_app" && a.providerApp.id === TOPAZ_ID_APP_ID,
-);
-const address = topaz?.embeddedWallets[0]?.address;
+const { address, signerAddress } = useTopazIdAccount();
+// address       → the user's Topaz ID smart contract wallet (their identity)
+// signerAddress → the embedded EOA that signs for it (signer-only)
 ```
+
+`address` is `undefined` until the user's smart wallet is provisioned and linked, so
+guard on it with a loading state before rendering or transacting.
 
 ## Exports
 
@@ -224,7 +263,7 @@ const address = topaz?.embeddedWallets[0]?.address;
 | `@topazdex/id-connect/connectors` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN`, `TopazIdConnectorOptions` |
 | `@topazdex/id-connect/rainbow-kit` | *Deprecated alias of `/connectors`* |
 | `@topazdex/id-connect/react` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdProfile` |
-| `@topazdex/id-connect/privy` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `topazIdLoginMethod` |
+| `@topazdex/id-connect/privy` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `useTopazIdAccount`, `topazIdLoginMethod` |
 
 ## Peer dependencies
 

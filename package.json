@@ -1,7 +1,7 @@
 {
   "name": "@topazdex/id-connect",
-  "version": "0.2.0",
-  "description": "Add Topaz ID — a BNB Chain global wallet — to your dapp in one line.",
+  "version": "0.3.0",
+  "description": "Add Topaz ID — a BNB Chain smart-wallet global account — to your dapp in one line.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -41,6 +41,9 @@
     "topaz-id",
     "privy",
     "global-wallet",
+    "smart-wallet",
+    "account-abstraction",
+    "erc-4337",
     "cross-app",
     "wagmi",
     "rainbowkit",
@@ -113,7 +116,7 @@
     "prepublishOnly": "yarn build"
   },
   "peerDependencies": {
-    "@privy-io/cross-app-connect": "^0.5.0",
+    "@privy-io/cross-app-connect": "^0.5.12",
     "@privy-io/react-auth": "^2 || ^3",
     "@rainbow-me/rainbowkit": "^2.2.3",
     "@tanstack/react-query": "^5",

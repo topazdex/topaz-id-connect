@@ -1,6 +1,8 @@
 import {
   PrivyProvider,
   useCrossAppAccounts,
+  usePrivy,
+  type CrossAppAccountWithMetadata,
   type LoginMethodOrderOption,
   type PrivyProviderProps,
 } from "@privy-io/react-auth";
@@ -51,6 +53,47 @@ export function useTopazIdCrossAppLogin(
   );
 
   return { login, link };
+}
+
+export interface TopazIdCrossAppAccount {
+  /**
+   * The user's Topaz ID **smart contract wallet** — their canonical on-chain
+   * identity, and the address to display and to look profiles up by. `undefined`
+   * until a Topaz ID account is linked (and the provider has smart wallets enabled).
+   */
+  address: string | undefined;
+  /**
+   * The embedded EOA that signs for the smart wallet. Signer-only — never treat it
+   * as the user's on-chain identity (funds live on the smart wallet).
+   */
+  signerAddress: string | undefined;
+}
+
+/**
+ * Read the linked Topaz ID account off the authenticated Privy user. Returns the
+ * smart contract wallet as `address` and the embedded signer EOA as `signerAddress`.
+ * Use this on the `/privy` cross-app path instead of reading `embeddedWallets[0]`,
+ * which is only the signer.
+ *
+ * @example
+ * const { address } = useTopazIdAccount();
+ * // const { data: profile } = useTopazIdProfile(address); // from /react
+ */
+export function useTopazIdAccount(
+  options: UseTopazIdCrossAppLoginOptions = {},
+): TopazIdCrossAppAccount {
+  const { user } = usePrivy();
+  const appId = options.appId ?? TOPAZ_ID_APP_ID;
+
+  const account = user?.linkedAccounts.find(
+    (entry): entry is CrossAppAccountWithMetadata =>
+      entry.type === "cross_app" && entry.providerApp.id === appId,
+  );
+
+  return {
+    address: account?.smartWallets[0]?.address,
+    signerAddress: account?.embeddedWallets[0]?.address,
+  };
 }
 
 export interface TopazIdPrivyProviderProps extends PrivyProviderProps {}
