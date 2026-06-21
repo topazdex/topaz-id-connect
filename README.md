@@ -30,7 +30,8 @@ id.topazdex.com — instead of the embedded signer EOA. Most apps need no code c
   not ECDSA** — see [Using the wallet](#using-the-wallet). Update SIWE/`ecrecover`
   backends to an ERC-1271-aware check.
 - **Opt out:** pass `{ smartWalletMode: false }` to `topazIdConnector()`,
-  `topazIdWallet()`, or `TopazIdProvider` to keep the legacy signer-EOA behavior.
+  `topazIdWallet()`, or `TopazIdProvider` to keep the **Legacy** signer-EOA mode —
+  see [Smart vs Legacy wallets](#smart-vs-legacy-wallets).
 
 `^0.2` consumers don't automatically cross the minor — you upgrade deliberately.
 
@@ -187,9 +188,58 @@ which differs from a plain EOA in two ways worth knowing:
   ERC-1271/6492-aware check — `viem`'s `verifyMessage` / `verifyTypedData` with a
   BNB Chain public client — **not** `ecrecover`.
 
-> Need the legacy embedded **signer EOA** instead of the smart wallet? Pass
+> Need the **Legacy** signer EOA instead of the **Smart** wallet? Pass
 > `{ smartWalletMode: false }` to `topazIdConnector()`, `topazIdWallet()`, or
 > `TopazIdProvider`. That address is signer-only — not where the user holds funds.
+> See [Smart vs Legacy wallets](#smart-vs-legacy-wallets).
+
+## Smart vs Legacy wallets
+
+Topaz ID has two wallet modes, labelled here the same way as on id.topazdex.com:
+
+- **Smart** — the user's smart contract wallet (Kernel/ZeroDev). The default, and
+  the right choice for every new integration.
+- **Legacy** — the underlying Privy **signer EOA**. Exposed only for backward
+  compatibility with existing dapps whose users transacted with that EOA directly
+  before the smart-wallet cutover.
+
+**New integrations need to do nothing** — the connector defaults to Smart, and you
+shouldn't surface Legacy at all. Only an existing dapp with users who hold funds on
+the signer EOA should offer both. **When you show both modes or let the user switch,
+label them "Smart" and "Legacy"** — the canonical strings, descriptions, and a
+`TopazIdWalletMode` type are exported so your toggle matches ours:
+
+```ts
+import {
+  TOPAZ_ID_WALLET_MODES,
+  topazIdWalletMode,
+  type TopazIdWalletMode,
+} from "@topazdex/id-connect";
+
+TOPAZ_ID_WALLET_MODES.smart;
+// → { mode: "smart",  label: "Smart",  description: "Gas-free smart wallet (recommended)" }
+TOPAZ_ID_WALLET_MODES.legacy;
+// → { mode: "legacy", label: "Legacy", description: "Your original Privy signing wallet" }
+
+// Map the connector flag to a mode (undefined/true → "smart", false → "legacy"):
+topazIdWalletMode(false); // "legacy"
+```
+
+To offer both in a RainbowKit picker, add a second, **Legacy**-labelled connector
+alongside the default:
+
+```ts
+import { topazIdWallet } from "@topazdex/id-connect/connectors";
+import { TOPAZ_ID_NAME, TOPAZ_ID_LEGACY_WALLET_LABEL } from "@topazdex/id-connect";
+
+const wallets = [
+  topazIdWallet(), // Smart (default)
+  topazIdWallet({
+    smartWalletMode: false,
+    name: `${TOPAZ_ID_NAME} (${TOPAZ_ID_LEGACY_WALLET_LABEL})`, // "Topaz ID (Legacy)"
+  }),
+];
+```
 
 ## Show the user's Topaz ID profile
 
@@ -253,13 +303,15 @@ const { address, signerAddress } = useTopazIdAccount();
 ```
 
 `address` is `undefined` until the user's smart wallet is provisioned and linked, so
-guard on it with a loading state before rendering or transacting.
+guard on it with a loading state before rendering or transacting. If you display
+both, label them **Smart** (`address`) and **Legacy** (`signerAddress`) — see
+[Smart vs Legacy wallets](#smart-vs-legacy-wallets).
 
 ## Exports
 
 | Entry | Contents |
 | --- | --- |
-| `@topazdex/id-connect` | `TOPAZ_ID_APP_ID`, `TOPAZ_ID_CONNECTOR_ID`, `TOPAZ_ID_NAME`, `TOPAZ_ID_ICON_URL`, `TOPAZ_ID_BASE_URL`, `fetchTopazIdProfile`, `displayNameForWallet`, `avatarForWallet`, `shortenAddress`, `TopazIdProfile` |
+| `@topazdex/id-connect` | `TOPAZ_ID_APP_ID`, `TOPAZ_ID_CONNECTOR_ID`, `TOPAZ_ID_NAME`, `TOPAZ_ID_ICON_URL`, `TOPAZ_ID_BASE_URL`, `TOPAZ_ID_SMART_WALLET_LABEL`, `TOPAZ_ID_LEGACY_WALLET_LABEL`, `TOPAZ_ID_WALLET_MODES`, `topazIdWalletMode`, `TopazIdWalletMode`, `TopazIdWalletModeInfo`, `fetchTopazIdProfile`, `displayNameForWallet`, `avatarForWallet`, `shortenAddress`, `TopazIdProfile` |
 | `@topazdex/id-connect/connectors` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN`, `TopazIdConnectorOptions` |
 | `@topazdex/id-connect/rainbow-kit` | *Deprecated alias of `/connectors`* |
 | `@topazdex/id-connect/react` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdProfile` |

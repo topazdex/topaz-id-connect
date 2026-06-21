@@ -15,12 +15,17 @@ export interface TopazIdConnectorOptions {
   /** Override the wallet icon shown in the picker. */
   iconUrl?: string;
   /**
-   * Surface the user's Topaz ID **smart contract wallet** (Kernel/ZeroDev) as the
-   * connected account, and route sends as gas-sponsored UserOperations through
-   * Topaz ID. Defaults to `true` — the smart wallet is the user's canonical
-   * on-chain identity. Set `false` for legacy behavior, where the connector
-   * exposes the embedded **signer EOA** instead (signer-only — not where the user
-   * holds funds).
+   * Display name shown in wallet pickers (e.g. RainbowKit). Defaults to
+   * `"Topaz ID"`. When you surface both modes as separate entries, label the Legacy
+   * one — e.g. `` `${TOPAZ_ID_NAME} (${TOPAZ_ID_LEGACY_WALLET_LABEL})` ``.
+   */
+  name?: string;
+  /**
+   * Selects the **Smart** wallet mode (the user's smart contract wallet) when
+   * `true` — the default, and the user's canonical on-chain identity; sends route
+   * as gas-sponsored UserOperations through Topaz ID. Set `false` for **Legacy**
+   * mode, which exposes the embedded Privy **signer EOA** (signer-only — not where
+   * the user holds funds), kept for backward compatibility with existing dapps.
    *
    * @remarks Backed by Privy cross-app `smartWalletMode`, which Privy marks
    * `@experimental`; its behavior can change between `@privy-io/cross-app-connect`
@@ -32,7 +37,7 @@ export interface TopazIdConnectorOptions {
 /**
  * A RainbowKit wallet for Topaz ID. Drop into `connectorsForWallets`. By default
  * the connected account is the user's Topaz ID **smart contract wallet**; pass
- * `{ smartWalletMode: false }` for the legacy signer-EOA behavior.
+ * `{ smartWalletMode: false }` for **Legacy** mode (the signer EOA).
  *
  * @example
  * import { connectorsForWallets } from "@rainbow-me/rainbowkit";
@@ -48,7 +53,7 @@ export function topazIdWallet(
 ): () => Wallet {
   const base = {
     id: options.appId ?? TOPAZ_ID_APP_ID,
-    name: TOPAZ_ID_NAME,
+    name: options.name ?? TOPAZ_ID_NAME,
     iconUrl: options.iconUrl ?? TOPAZ_ID_ICON_URL,
   };
   const smartWalletMode = options.smartWalletMode ?? true;
@@ -69,7 +74,7 @@ export function topazIdWallet(
 /**
  * A plain wagmi connector for Topaz ID — no RainbowKit required. By default the
  * connected account is the user's Topaz ID **smart contract wallet**; pass
- * `{ smartWalletMode: false }` for the legacy signer-EOA behavior.
+ * `{ smartWalletMode: false }` for **Legacy** mode (the signer EOA).
  *
  * @example
  * import { createConfig, http } from "wagmi";
@@ -85,7 +90,7 @@ export function topazIdWallet(
 export function topazIdConnector(options: TopazIdConnectorOptions = {}) {
   return toPrivyWalletConnector({
     id: options.appId ?? TOPAZ_ID_APP_ID,
-    name: TOPAZ_ID_NAME,
+    name: options.name ?? TOPAZ_ID_NAME,
     iconUrl: options.iconUrl ?? TOPAZ_ID_ICON_URL,
     smartWalletMode: options.smartWalletMode ?? true,
   });
