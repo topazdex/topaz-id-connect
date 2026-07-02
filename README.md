@@ -14,8 +14,22 @@ need to be allowlisted by Topaz ID.
 ## Demo
 
 See it live: **[topaz-id-demo.vercel.app](https://topaz-id-demo.vercel.app)** — a
-Next.js + RainbowKit app demonstrating connect, profile display, and signing.
+Next.js + RainbowKit app demonstrating connect, profile display, smart-wallet
+sends, and a batched approve + swap.
 Source: [topazdex/topaz-id-connect-demo](https://github.com/topazdex/topaz-id-connect-demo).
+
+## New in 0.4
+
+`0.4` adds the **smart-wallet action client** — the recommended way to send
+transactions: `useTopazIdClient` on `/react`, and `createTopazIdClient` on the
+new `/actions` entry for non-React apps. See
+[Using the wallet](#using-the-wallet). Purely additive: existing integrations
+keep working unchanged.
+
+If value-bearing transactions were failing for you on plain wagmi (the consent
+popup can't estimate the cost, and submitting errors), this client is the fix —
+upgrade to `^0.4.1` and route sends through it. As with 0.3, `^0.3` consumers
+don't automatically cross the minor — upgrade deliberately.
 
 ## Upgrading to 0.3.0
 
@@ -192,6 +206,21 @@ await topazClient?.sendCalls({
 });
 ```
 
+`useTopazIdClient` also returns `isTopazId`, and `data` stays `undefined` when
+the connected wallet isn't Topaz ID — so in a multi-wallet dapp the drop-in
+pattern is a single branch, no connector sniffing:
+
+```ts
+const { data: topazClient } = useTopazIdClient();
+
+const hash = topazClient
+  ? await topazClient.sendTransaction({ to, value }) // Topaz ID smart wallet
+  : await sendTransactionAsync({ to, value, chainId: 56 }); // any other wallet
+```
+
+Pass `useTopazIdClient({ appId })` when your connector was configured with a
+custom app id.
+
 Framework-agnostic apps can use the action client directly with any EIP-1193-ish
 provider:
 
@@ -206,6 +235,10 @@ const topazClient = await createTopazIdClient({
 
 await topazClient.sendCalls({ calls: [approvalCall, swapCall] });
 ```
+
+Plain object literals work for every call; the optional `txCall(...)` /
+`contractCall(...)` builders do the same thing but validate the target address
+eagerly, so a typo fails before a consent popup ever opens.
 
 Plain wagmi (`useSendTransaction` / `useWriteContract`) still works for calls
 that carry **no native BNB** — approvals and most contract writes. Anything with
@@ -377,10 +410,11 @@ both, label them **Smart** (`address`) and **Legacy** (`signerAddress`) — see
 
 | Entry | Contents |
 | --- | --- |
-| `@topazdex/id-connect` | `TOPAZ_ID_APP_ID`, `TOPAZ_ID_CONNECTOR_ID`, `TOPAZ_ID_NAME`, `TOPAZ_ID_ICON_URL`, `TOPAZ_ID_BASE_URL`, `TOPAZ_ID_SMART_WALLET_LABEL`, `TOPAZ_ID_LEGACY_WALLET_LABEL`, `TOPAZ_ID_WALLET_MODES`, `topazIdWalletMode`, `TopazIdWalletMode`, `TopazIdWalletModeInfo`, `fetchTopazIdProfile`, `displayNameForWallet`, `avatarForWallet`, `shortenAddress`, `TopazIdProfile` |
+| `@topazdex/id-connect` | `TOPAZ_ID_APP_ID`, `TOPAZ_ID_CONNECTOR_ID`, `TOPAZ_ID_CHAIN_ID`, `TOPAZ_ID_NAME`, `TOPAZ_ID_ICON_URL`, `TOPAZ_ID_BASE_URL`, `TOPAZ_ID_SMART_WALLET_LABEL`, `TOPAZ_ID_LEGACY_WALLET_LABEL`, `TOPAZ_ID_WALLET_MODES`, `topazIdWalletMode`, `TopazIdWalletMode`, `TopazIdWalletModeInfo`, `fetchTopazIdProfile`, `displayNameForWallet`, `avatarForWallet`, `shortenAddress`, `TopazIdProfile` |
 | `@topazdex/id-connect/connectors` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN`, `TopazIdConnectorOptions` |
+| `@topazdex/id-connect/actions` | `createTopazIdClient`, `txCall`, `contractCall`, `isTopazIdConnectorId`, `TopazIdClient`, `TopazIdClientOptions`, `TopazIdCall`, `TopazIdContractCall`, `TopazIdSendCallsParameters`, `TopazIdCapabilities`, `TopazIdProviderLike` |
 | `@topazdex/id-connect/rainbow-kit` | *Deprecated alias of `/connectors`* |
-| `@topazdex/id-connect/react` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdProfile` |
+| `@topazdex/id-connect/react` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdClient`, `useTopazIdProfile` |
 | `@topazdex/id-connect/privy` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `useTopazIdAccount`, `topazIdLoginMethod` |
 
 ## Peer dependencies
@@ -390,8 +424,9 @@ All peers are optional; install only what your entrypoints use.
 | You use | Install |
 | --- | --- |
 | Profile helpers only (`@topazdex/id-connect`) | nothing extra |
-| `TopazIdProvider` / `useTopazIdLogin` (`/react`) | `wagmi`, `viem`, `@tanstack/react-query`, `react`, `@privy-io/cross-app-connect` |
+| `TopazIdProvider` / `useTopazIdLogin` / `useTopazIdClient` (`/react`) | `wagmi`, `viem`, `@tanstack/react-query`, `react`, `@privy-io/cross-app-connect` |
 | Connectors (`/connectors`) | `@privy-io/cross-app-connect`, `viem`, `wagmi` (+ `@rainbow-me/rainbowkit` for `topazIdWallet`) |
+| Action client (`/actions`) | `viem` |
 | `useTopazIdProfile` only (`/react`) | `@tanstack/react-query`, `react` |
 | Privy cross-app (`/privy`) | `@privy-io/react-auth`, `react` |
 
