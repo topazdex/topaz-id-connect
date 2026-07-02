@@ -207,20 +207,38 @@ const topazClient = await createTopazIdClient({
 await topazClient.sendCalls({ calls: [approvalCall, swapCall] });
 ```
 
-Topaz ID still works with standard wagmi calls for simple sends, but the client
-above is the recommended path for production dapps that need smart-wallet-safe
-batching, native-value transactions, or aggregator calldata execution.
+Plain wagmi (`useSendTransaction` / `useWriteContract`) still works for calls
+that carry **no native BNB** — approvals and most contract writes. Anything with
+a native `value` must go through this client: wagmi hex-encodes `value`, and the
+Topaz ID popup rejects hex quantity strings. That mismatch is why value-bearing
+transactions fail with a "can't estimate cost" popup on raw connector
+integrations while approvals sail through.
 
-Two rules keep transactions routing through the smart wallet reliably:
+A few rules keep transactions routing through the smart wallet reliably:
 
-- **Sign and send with this client (or plain wagmi) — never `@privy-io/react-auth`
-  signing hooks.** Those are embedded-wallet-only and execute from the underlying
-  Privy EOA instead of the user's Topaz ID smart wallet.
+- **Sign and send with this client (or plain wagmi for zero-value calls) — never
+  `@privy-io/react-auth` signing hooks.** Those are embedded-wallet-only and
+  execute from the underlying Privy EOA instead of the user's Topaz ID smart
+  wallet.
 - **Every action opens a Topaz ID consent window; the user approves each one.**
   Trigger sends from a direct user interaction (a button click) so browsers don't
   block the popup — a send fired after a long `await` chain can be popup-blocked.
   Prefer batching an approval + action into one `sendCalls` bundle: one popup, one
   approval, atomic execution.
+- **Pass native `value` as a `bigint` and let the SDK format it.** The popup
+  expects a plain JSON number and rejects hex. Above 2^53−1 wei (~0.009 BNB) the
+  conversion can round by sub-1000-wei dust — economically negligible, and round
+  amounts (0.1 / 1 / 10 BNB) are exactly representable. Don't pre-encode `value`
+  yourself.
+- **`sendCalls` degrades gracefully.** It submits one atomic bundle; if the
+  wallet rejects the bundle, the SDK retries the calls sequentially (one consent
+  popup per call) and returns the last call's hash. Pass `atomicRequired: true`
+  to get the batch error instead of the fallback.
+- **Treat receipt lookups as best-effort.** The returned hash is usually a
+  transaction hash, but some smart-wallet flows return an id that
+  `eth_getTransactionReceipt` cannot resolve. Poll for the receipt with a
+  timeout and fall back to re-reading your app state (balances, allowances)
+  rather than blocking the UI on the receipt alone.
 
 The connected account is a **smart contract wallet** (Kernel/ZeroDev on BNB Chain),
 which differs from a plain EOA in two ways worth knowing:

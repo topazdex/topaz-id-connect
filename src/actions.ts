@@ -1,7 +1,6 @@
 import {
   encodeFunctionData,
   isAddress,
-  numberToHex,
   type Abi,
   type Address,
   type Hex,
@@ -53,6 +52,12 @@ export interface TopazIdClientOptions {
 
 export interface TopazIdSendCallsParameters {
   calls: readonly (TopazIdCall | TopazIdContractCall)[];
+  /**
+   * Require atomic execution. When the wallet rejects the batched bundle,
+   * `sendCalls` normally falls back to sequential sends (one consent popup per
+   * call); pass `true` to get the batch error instead of that fallback.
+   */
+  atomicRequired?: boolean;
 }
 
 export interface TopazIdClient {
@@ -60,6 +65,12 @@ export interface TopazIdClient {
   chainId: number;
   getCapabilities(): Promise<TopazIdCapabilities>;
   sendTransaction(call: TopazIdCall | TopazIdContractCall): Promise<Hex>;
+  /**
+   * Submit multiple calls as one atomic smart-wallet operation (a single consent
+   * popup). If the wallet rejects the bundle, the calls are retried sequentially —
+   * one popup per call — and the hash of the LAST call is returned; set
+   * `atomicRequired: true` to disable that fallback.
+   */
   sendCalls(parameters: TopazIdSendCallsParameters | readonly (TopazIdCall | TopazIdContractCall)[]): Promise<Hex>;
   writeContract(call: TopazIdContractCall): Promise<Hex>;
 }
@@ -67,7 +78,7 @@ export interface TopazIdClient {
 interface PrivySmartWalletCall {
   to: Address;
   data: Hex;
-  value?: Hex;
+  value?: number;
 }
 
 function assertAddress(value: unknown, label: string): Address {
@@ -91,19 +102,30 @@ function encodeContractCall(call: TopazIdContractCall): Hex {
   });
 }
 
+/**
+ * Topaz ID's transact popup accepts native `value` only as a plain JSON number —
+ * it rejects hex quantity strings, the format wagmi/viem emit (which is why
+ * value-bearing transactions fail through the raw connector). Above 2^53-1 wei
+ * (~0.009 BNB) the conversion can round by sub-1000-wei dust; round amounts
+ * (0.1 / 1 / 10 BNB) are exactly representable.
+ */
+function formatSmartWalletValue(value: bigint): number {
+  return Number(value);
+}
+
 function normalizeCall(call: TopazIdCall | TopazIdContractCall): PrivySmartWalletCall {
   if ("address" in call) {
     return {
       to: assertAddress(call.address, "call.address"),
       data: encodeContractCall(call),
-      ...(call.value == null ? {} : { value: numberToHex(call.value) }),
+      ...(call.value == null ? {} : { value: formatSmartWalletValue(call.value) }),
     };
   }
 
   return {
     to: assertAddress(call.to, "call.to"),
     data: call.data ?? "0x",
-    ...(call.value == null ? {} : { value: numberToHex(call.value) }),
+    ...(call.value == null ? {} : { value: formatSmartWalletValue(call.value) }),
   };
 }
 
@@ -124,6 +146,20 @@ function assertHash(value: unknown, action: string): Hex {
   throw new Error(`Topaz ID ${action} was accepted, but no transaction hash was returned.`);
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isUserRejection(error: unknown): boolean {
+  return /user rejected|user denied|rejected the request/i.test(errorMessage(error));
+}
+
+function isBatchUnsupported(error: unknown): boolean {
+  return /unsupported|not supported|method not found|invalid|malformed|unknown|calls|batch|atomic|4200|UserOperation reverted during simulation with reason:\s*0x/i.test(
+    errorMessage(error),
+  );
+}
+
 /**
  * Whether a wagmi connector id belongs to Topaz ID. Pass `appId` when your app
  * configures the connector with a custom app id (e.g. a staging app).
@@ -138,8 +174,10 @@ export function isTopazIdConnectorId(
 /**
  * Create a high-level client for the Topaz ID smart wallet. Wraps Privy's
  * `privy_sendSmartWalletTx` RPC so partners get `sendTransaction`, `sendCalls`,
- * and `writeContract` without hand-rolling payloads: native `value` is encoded
- * as a lossless hex quantity and multiple calls batch into one atomic operation.
+ * and `writeContract` without hand-rolling payloads: native `value` is converted
+ * to the wire format the Topaz popup accepts, and multiple calls batch into one
+ * atomic operation (with a sequential per-call fallback when the wallet rejects
+ * the bundle — see {@link TopazIdSendCallsParameters.atomicRequired}).
  */
 export async function createTopazIdClient(options: TopazIdClientOptions): Promise<TopazIdClient> {
   const account = await resolveAccount(options.provider, options.account);
@@ -171,6 +209,23 @@ export async function createTopazIdClient(options: TopazIdClientOptions): Promis
     return assertHash(result, encoded.length === 1 ? "transaction" : "call bundle");
   }
 
+  async function sendCallsWithFallback(
+    calls: readonly (TopazIdCall | TopazIdContractCall)[],
+    atomicRequired: boolean,
+  ): Promise<Hex> {
+    if (calls.length <= 1) return sendPrivySmartWalletTx(calls);
+    try {
+      return await sendPrivySmartWalletTx(calls);
+    } catch (error) {
+      if (atomicRequired || isUserRejection(error) || !isBatchUnsupported(error)) throw error;
+      let lastHash = await sendPrivySmartWalletTx([calls[0]!]);
+      for (const call of calls.slice(1)) {
+        lastHash = await sendPrivySmartWalletTx([call]);
+      }
+      return lastHash;
+    }
+  }
+
   return {
     account,
     chainId,
@@ -188,7 +243,9 @@ export async function createTopazIdClient(options: TopazIdClientOptions): Promis
       return sendPrivySmartWalletTx([call]);
     },
     sendCalls(parameters) {
-      return sendPrivySmartWalletTx(normalizeCalls(parameters));
+      const atomicRequired =
+        isSendCallsParameters(parameters) && (parameters.atomicRequired ?? false);
+      return sendCallsWithFallback(normalizeCalls(parameters), atomicRequired);
     },
     writeContract(call) {
       return sendPrivySmartWalletTx([call]);

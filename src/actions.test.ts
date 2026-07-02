@@ -13,7 +13,9 @@ const account = "0x1111111111111111111111111111111111111111" as Address;
 const token = "0x2222222222222222222222222222222222222222" as Address;
 const spender = "0x3333333333333333333333333333333333333333" as Address;
 
-function provider(result = "0xabc"): TopazIdProviderLike & { request: ReturnType<typeof vi.fn> } {
+type MockProvider = TopazIdProviderLike & { request: ReturnType<typeof vi.fn> };
+
+function provider(result = "0xabc"): MockProvider {
   return {
     request: vi.fn(async ({ method }) => {
       if (method === "eth_accounts") return [account];
@@ -22,8 +24,21 @@ function provider(result = "0xabc"): TopazIdProviderLike & { request: ReturnType
   };
 }
 
+function batchRejectingProvider(batchError: Error): MockProvider {
+  let singles = 0;
+  return {
+    request: vi.fn(async ({ method, params }) => {
+      if (method === "eth_accounts") return [account];
+      const [payload] = params as [{ calls?: unknown }];
+      if (payload.calls) throw batchError;
+      singles += 1;
+      return `0x${singles.toString(16)}11`;
+    }),
+  };
+}
+
 describe("Topaz ID action client", () => {
-  it("sends a single transaction through privy_sendSmartWalletTx", async () => {
+  it("sends native value as a JS number — the only format the Topaz popup accepts", async () => {
     const p = provider("0xaaa");
     const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
 
@@ -40,20 +55,20 @@ describe("Topaz ID action client", () => {
           chainId: 56,
           to: spender,
           data: "0x1234",
-          value: "0x1",
+          value: 1,
         },
       ],
     });
   });
 
-  it("encodes native value as a lossless hex quantity above 2^53 wei", async () => {
+  it("rounds sub-wei dust above 2^53 wei rather than sending hex", async () => {
     const p = provider("0xfff");
     const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
 
     const wei = parseEther("1.000000000000000001");
     await client.sendTransaction({ to: spender, value: wei });
 
-    expect(BigInt(wei) > BigInt(Number.MAX_SAFE_INTEGER)).toBe(true);
+    expect(wei > BigInt(Number.MAX_SAFE_INTEGER)).toBe(true);
     expect(p.request).toHaveBeenCalledWith({
       method: "privy_sendSmartWalletTx",
       params: [
@@ -62,7 +77,7 @@ describe("Topaz ID action client", () => {
           chainId: 56,
           to: spender,
           data: "0x",
-          value: "0xde0b6b3a7640001",
+          value: 1_000_000_000_000_000_000,
         },
       ],
     });
@@ -99,12 +114,52 @@ describe("Topaz ID action client", () => {
             {
               to: spender,
               data: "0x99",
-              value: "0x2386f26fc10000",
+              value: 10_000_000_000_000_000,
             },
           ],
         },
       ],
     });
+  });
+
+  it("falls back to sequential sends when the wallet rejects the bundle", async () => {
+    const p = batchRejectingProvider(new Error("Unsupported method"));
+    const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
+
+    const hash = await client.sendCalls([
+      txCall({ to: token, data: "0x01" }),
+      txCall({ to: spender, data: "0x02" }),
+    ]);
+
+    expect(hash).toBe("0x211");
+    expect(p.request).toHaveBeenCalledTimes(3);
+    expect(p.request).toHaveBeenLastCalledWith({
+      method: "privy_sendSmartWalletTx",
+      params: [{ from: account, chainId: 56, to: spender, data: "0x02" }],
+    });
+  });
+
+  it("surfaces the batch error when atomicRequired is set", async () => {
+    const p = batchRejectingProvider(new Error("Unsupported method"));
+    const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
+
+    await expect(
+      client.sendCalls({
+        calls: [txCall({ to: token, data: "0x01" }), txCall({ to: spender, data: "0x02" })],
+        atomicRequired: true,
+      }),
+    ).rejects.toThrow("Unsupported method");
+    expect(p.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry sequentially after a user rejection", async () => {
+    const p = batchRejectingProvider(new Error("User rejected request"));
+    const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
+
+    await expect(
+      client.sendCalls([txCall({ to: token, data: "0x01" }), txCall({ to: spender, data: "0x02" })]),
+    ).rejects.toThrow("User rejected request");
+    expect(p.request).toHaveBeenCalledTimes(1);
   });
 
   it("resolves the account from eth_accounts when omitted", async () => {
