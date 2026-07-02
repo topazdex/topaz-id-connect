@@ -11,6 +11,9 @@ export const TOPAZ_ID_APP_ID = "cmpt1zsgh00rs0cld1hgqc0v7";
  */
 export const TOPAZ_ID_CONNECTOR_ID = TOPAZ_ID_APP_ID;
 
+/** BNB Chain mainnet — the chain Topaz ID smart wallets operate on. */
+export const TOPAZ_ID_CHAIN_ID = 56;
+
 export const TOPAZ_ID_NAME = "Topaz ID";
 
 export const TOPAZ_ID_ICON_URL =

@@ -3,10 +3,11 @@ import { erc20Abi, parseEther, type Address } from "viem";
 import {
   contractCall,
   createTopazIdClient,
-  formatSmartWalletValue,
+  isTopazIdConnectorId,
   txCall,
   type TopazIdProviderLike,
 } from "./actions";
+import { TOPAZ_ID_CONNECTOR_ID } from "./constants";
 
 const account = "0x1111111111111111111111111111111111111111" as Address;
 const token = "0x2222222222222222222222222222222222222222" as Address;
@@ -22,10 +23,6 @@ function provider(result = "0xabc"): TopazIdProviderLike & { request: ReturnType
 }
 
 describe("Topaz ID action client", () => {
-  it("normalizes native value for the smart-wallet RPC", () => {
-    expect(formatSmartWalletValue(parseEther("0.01"))).toBe(Number(parseEther("0.01")));
-  });
-
   it("sends a single transaction through privy_sendSmartWalletTx", async () => {
     const p = provider("0xaaa");
     const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
@@ -43,7 +40,29 @@ describe("Topaz ID action client", () => {
           chainId: 56,
           to: spender,
           data: "0x1234",
-          value: 1,
+          value: "0x1",
+        },
+      ],
+    });
+  });
+
+  it("encodes native value as a lossless hex quantity above 2^53 wei", async () => {
+    const p = provider("0xfff");
+    const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
+
+    const wei = parseEther("1.000000000000000001");
+    await client.sendTransaction({ to: spender, value: wei });
+
+    expect(BigInt(wei) > BigInt(Number.MAX_SAFE_INTEGER)).toBe(true);
+    expect(p.request).toHaveBeenCalledWith({
+      method: "privy_sendSmartWalletTx",
+      params: [
+        {
+          from: account,
+          chainId: 56,
+          to: spender,
+          data: "0x",
+          value: "0xde0b6b3a7640001",
         },
       ],
     });
@@ -61,7 +80,7 @@ describe("Topaz ID action client", () => {
           functionName: "approve",
           args: [spender, 5n],
         }),
-        txCall({ to: spender, data: "0x99" }),
+        txCall({ to: spender, data: "0x99", value: parseEther("0.01") }),
       ],
     });
 
@@ -80,6 +99,7 @@ describe("Topaz ID action client", () => {
             {
               to: spender,
               data: "0x99",
+              value: "0x2386f26fc10000",
             },
           ],
         },
@@ -93,5 +113,22 @@ describe("Topaz ID action client", () => {
 
     expect(client.account).toBe(account);
     expect(p.request).toHaveBeenCalledWith({ method: "eth_accounts" });
+  });
+
+  it("rejects an invalid target address before opening a popup", async () => {
+    const p = provider();
+    const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
+
+    await expect(
+      client.sendTransaction({ to: "0xnot-an-address" as Address }),
+    ).rejects.toThrow("call.to must be a valid 0x-prefixed EVM address.");
+    expect(p.request).not.toHaveBeenCalled();
+  });
+
+  it("recognizes Topaz ID connector ids, including custom app ids", () => {
+    expect(isTopazIdConnectorId(TOPAZ_ID_CONNECTOR_ID)).toBe(true);
+    expect(isTopazIdConnectorId("some-other-wallet")).toBe(false);
+    expect(isTopazIdConnectorId(undefined)).toBe(false);
+    expect(isTopazIdConnectorId("staging-app-id", "staging-app-id")).toBe(true);
   });
 });

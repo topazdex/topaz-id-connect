@@ -19,7 +19,12 @@ import {
 } from "wagmi";
 import { TOPAZ_ID_APP_ID } from "./constants";
 import { topazIdConnector, TOPAZ_ID_CHAIN } from "./connectors";
-import { createTopazIdClient, type TopazIdClient, type TopazIdProviderLike } from "./actions";
+import {
+  createTopazIdClient,
+  isTopazIdConnectorId,
+  type TopazIdClient,
+  type TopazIdProviderLike,
+} from "./actions";
 import { fetchTopazIdProfile, type TopazIdProfile } from "./profile";
 
 export interface TopazIdProviderProps {
@@ -145,10 +150,11 @@ export interface UseTopazIdClientOptions {
 }
 
 /**
- * AGW-style action client for Topaz ID smart wallets. Partners can call
- * `client.sendTransaction`, `client.sendCalls`, or `client.writeContract` instead
- * of hand-rolling Privy's smart-wallet RPC or worrying about native-value/batch
- * formatting.
+ * High-level action client for the connected Topaz ID smart wallet. `data` is a
+ * {@link TopazIdClient} — call `client.sendTransaction`, `client.sendCalls`, or
+ * `client.writeContract` instead of hand-rolling Privy's smart-wallet RPC or
+ * worrying about native-value/batch formatting. `data` is `undefined` while the
+ * client is loading or when the connected wallet isn't Topaz ID (`isTopazId`).
  *
  * @example
  * const { data: topazClient } = useTopazIdClient();
@@ -157,52 +163,26 @@ export interface UseTopazIdClientOptions {
 export function useTopazIdClient(options: UseTopazIdClientOptions = {}) {
   const { address, connector } = useAccount();
   const appId = options.appId ?? TOPAZ_ID_APP_ID;
-  const enabled = Boolean(address && connector && (connector.id === appId || connector.type === "privy"));
-  const query = useConnectorClient({ connector, query: { enabled } });
+  const isTopazId = Boolean(address && isTopazIdConnectorId(connector?.id, appId));
+  const connectorClient = useConnectorClient({ connector, query: { enabled: isTopazId } });
+  const provider = connectorClient.data;
 
-  const client = useMemo<TopazIdClient | undefined>(() => {
-    if (!address || !query.data?.request) return undefined;
-    const provider = query.data as TopazIdProviderLike;
-    const chainId = query.data.chain.id;
-    const makeClient = () =>
-      createTopazIdClient({
-        provider,
+  const query = useQuery<TopazIdClient>({
+    queryKey: ["topaz-id-client", address, provider?.uid],
+    enabled: Boolean(isTopazId && address && provider?.request),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 0,
+    queryFn: () => {
+      if (!address || !provider) throw new Error("Topaz ID connector client is not ready.");
+      return createTopazIdClient({
+        provider: provider as TopazIdProviderLike,
         account: address,
-        chainId,
-        connectorId: connector?.id,
+        chainId: provider.chain.id,
       });
+    },
+  });
 
-    return {
-      account: address,
-      chainId,
-      sponsorship: "auto",
-      async getCapabilities() {
-        return {
-          topazId: connector?.id === appId,
-          smartWallet: true,
-          batching: true,
-          atomicBatching: true,
-          sponsored: true,
-          nativeValue: true,
-          chainId,
-        };
-      },
-      async sendTransaction(call) {
-        const topaz = await makeClient();
-        return topaz.sendTransaction(call);
-      },
-      async sendCalls(parameters) {
-        const topaz = await makeClient();
-        return topaz.sendCalls(parameters);
-      },
-      async writeContract(call) {
-        const topaz = await makeClient();
-        return topaz.writeContract(call);
-      },
-    };
-  }, [address, appId, connector?.id, query.data]);
-
-  return { ...query, data: client, isTopazId: enabled };
+  return { ...query, isTopazId };
 }
 
 export interface UseTopazIdProfileOptions {

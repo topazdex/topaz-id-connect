@@ -1,23 +1,26 @@
-import { encodeFunctionData, type Abi, type Address, type Hex } from "viem";
-import { TOPAZ_ID_CONNECTOR_ID } from "./constants";
+import {
+  encodeFunctionData,
+  isAddress,
+  numberToHex,
+  type Abi,
+  type Address,
+  type Hex,
+} from "viem";
+import { TOPAZ_ID_CHAIN_ID, TOPAZ_ID_CONNECTOR_ID } from "./constants";
 
 /** Minimal EIP-1193 provider shape used by the Topaz ID action client. */
 export interface TopazIdProviderLike {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
 }
 
-export type TopazIdSponsorshipMode = "sponsored" | "user-paid" | "auto";
-
 export interface TopazIdCapabilities {
-  /** True when the provider is recognized as Topaz ID's smart-wallet connector. */
-  topazId: boolean;
   /** Topaz ID smart mode executes from the user's smart contract wallet. */
   smartWallet: boolean;
   /** Multiple calls can be submitted as one smart-wallet operation. */
   batching: boolean;
   /** Topaz batches execute atomically: if one call reverts, the bundle reverts. */
   atomicBatching: boolean;
-  /** Whether a paymaster/sponsorship path is available for this client mode. */
+  /** Gas is sponsored by Topaz ID's paymaster policy. */
   sponsored: boolean;
   /** Native BNB value is supported on both single calls and batched calls. */
   nativeValue: boolean;
@@ -46,22 +49,15 @@ export interface TopazIdClientOptions {
   account?: Address;
   /** Chain id. Defaults to BNB Chain (56). */
   chainId?: number;
-  /** Defaults to `auto`. Reserved for future user-paid/paymaster selection. */
-  sponsorship?: TopazIdSponsorshipMode;
-  /** Connector id, used only for metadata/capability reporting. */
-  connectorId?: string;
 }
 
 export interface TopazIdSendCallsParameters {
   calls: readonly (TopazIdCall | TopazIdContractCall)[];
-  /** Topaz smart-wallet bundles are atomic by default. */
-  atomicRequired?: boolean;
 }
 
 export interface TopazIdClient {
   account: Address;
   chainId: number;
-  sponsorship: TopazIdSponsorshipMode;
   getCapabilities(): Promise<TopazIdCapabilities>;
   sendTransaction(call: TopazIdCall | TopazIdContractCall): Promise<Hex>;
   sendCalls(parameters: TopazIdSendCallsParameters | readonly (TopazIdCall | TopazIdContractCall)[]): Promise<Hex>;
@@ -71,46 +67,43 @@ export interface TopazIdClient {
 interface PrivySmartWalletCall {
   to: Address;
   data: Hex;
-  value?: number;
-}
-
-function isAddress(value: unknown): value is Address {
-  return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
+  value?: Hex;
 }
 
 function assertAddress(value: unknown, label: string): Address {
-  if (isAddress(value)) return value;
-  throw new Error(`${label} must be a 0x-prefixed EVM address.`);
+  if (typeof value === "string" && isAddress(value)) return value;
+  throw new Error(`${label} must be a valid 0x-prefixed EVM address.`);
 }
 
 async function resolveAccount(provider: TopazIdProviderLike, account?: Address): Promise<Address> {
   if (account) return account;
   const accounts = await provider.request({ method: "eth_accounts" });
-  if (Array.isArray(accounts) && isAddress(accounts[0])) return accounts[0];
+  const first = Array.isArray(accounts) ? accounts[0] : undefined;
+  if (typeof first === "string" && isAddress(first)) return first;
   throw new Error("Topaz ID account is not connected.");
 }
 
 function encodeContractCall(call: TopazIdContractCall): Hex {
   return encodeFunctionData({
-    abi: call.abi,
+    abi: call.abi as Abi,
     functionName: call.functionName,
     args: call.args,
-  } as never);
+  });
 }
 
 function normalizeCall(call: TopazIdCall | TopazIdContractCall): PrivySmartWalletCall {
   if ("address" in call) {
     return {
-      to: call.address,
+      to: assertAddress(call.address, "call.address"),
       data: encodeContractCall(call),
-      ...(call.value == null ? {} : { value: formatSmartWalletValue(call.value) }),
+      ...(call.value == null ? {} : { value: numberToHex(call.value) }),
     };
   }
 
   return {
-    to: call.to,
+    to: assertAddress(call.to, "call.to"),
     data: call.data ?? "0x",
-    ...(call.value == null ? {} : { value: formatSmartWalletValue(call.value) }),
+    ...(call.value == null ? {} : { value: numberToHex(call.value) }),
   };
 }
 
@@ -132,22 +125,25 @@ function assertHash(value: unknown, action: string): Hex {
 }
 
 /**
- * Privy's Topaz smart-wallet RPC accepts native `value` as a JS number. Keeping
- * this normalization inside the SDK prevents partner apps from discovering the
- * bigint/hex incompatibility themselves.
+ * Whether a wagmi connector id belongs to Topaz ID. Pass `appId` when your app
+ * configures the connector with a custom app id (e.g. a staging app).
  */
-export function formatSmartWalletValue(value: bigint): number {
-  return Number(value);
+export function isTopazIdConnectorId(
+  connectorId: string | undefined,
+  appId: string = TOPAZ_ID_CONNECTOR_ID,
+): boolean {
+  return connectorId != null && connectorId === appId;
 }
 
-export function isTopazIdConnectorId(connectorId: string | undefined): boolean {
-  return connectorId === TOPAZ_ID_CONNECTOR_ID;
-}
-
+/**
+ * Create a high-level client for the Topaz ID smart wallet. Wraps Privy's
+ * `privy_sendSmartWalletTx` RPC so partners get `sendTransaction`, `sendCalls`,
+ * and `writeContract` without hand-rolling payloads: native `value` is encoded
+ * as a lossless hex quantity and multiple calls batch into one atomic operation.
+ */
 export async function createTopazIdClient(options: TopazIdClientOptions): Promise<TopazIdClient> {
   const account = await resolveAccount(options.provider, options.account);
-  const chainId = options.chainId ?? 56;
-  const sponsorship = options.sponsorship ?? "auto";
+  const chainId = options.chainId ?? TOPAZ_ID_CHAIN_ID;
 
   async function sendPrivySmartWalletTx(calls: readonly (TopazIdCall | TopazIdContractCall)[]): Promise<Hex> {
     if (!calls.length) throw new Error("At least one call is required.");
@@ -178,14 +174,12 @@ export async function createTopazIdClient(options: TopazIdClientOptions): Promis
   return {
     account,
     chainId,
-    sponsorship,
     async getCapabilities() {
       return {
-        topazId: isTopazIdConnectorId(options.connectorId),
         smartWallet: true,
         batching: true,
         atomicBatching: true,
-        sponsored: sponsorship !== "user-paid",
+        sponsored: true,
         nativeValue: true,
         chainId,
       };
@@ -202,14 +196,9 @@ export async function createTopazIdClient(options: TopazIdClientOptions): Promis
   };
 }
 
-/** Convenience helper for raw EIP-1193 providers. */
-export async function getTopazIdClient(options: TopazIdClientOptions): Promise<TopazIdClient> {
-  return createTopazIdClient(options);
-}
-
 /**
- * Build a plain transaction call. Useful when mirroring Abstract AGW examples:
- * `client.sendCalls([txCall(...), contractCall(...)])`.
+ * Build a plain transaction call for `sendTransaction`/`sendCalls`, validating
+ * the target address eagerly so mistakes fail before a consent popup opens.
  */
 export function txCall(call: TopazIdCall): TopazIdCall {
   return { ...call, to: assertAddress(call.to, "call.to") };
