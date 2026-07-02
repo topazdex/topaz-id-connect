@@ -159,20 +159,68 @@ export const wagmiConfig = createConfig({
 
 ## Using the wallet
 
-Once connected, Topaz ID is a standard EIP-1193 wallet — use plain wagmi, **never**
-`@privy-io/react-auth` signing hooks (those are embedded-wallet-only and won't route
-through Topaz ID).
+For the smoothest smart-wallet UX, use the high-level Topaz ID client instead of
+hand-rolling provider RPC calls. It exposes `sendTransaction`, `sendCalls`, and
+`writeContract`, and hides Topaz smart-wallet details such as
+`privy_sendSmartWalletTx`, native BNB value formatting, and approval+action
+batching.
+
+```tsx
+import { useTopazIdClient } from "@topazdex/id-connect/react";
+import { erc20Abi, parseEther, parseUnits } from "viem";
+
+const { data: topazClient } = useTopazIdClient();
+
+await topazClient?.sendTransaction({
+  to,
+  value: parseEther("0.01"),
+});
+
+await topazClient?.sendCalls({
+  calls: [
+    {
+      address: TOKEN_ADDRESS,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [ROUTER_ADDRESS, parseUnits("100", 18)],
+    },
+    {
+      to: ROUTER_ADDRESS,
+      data: swapCalldata,
+    },
+  ],
+});
+```
+
+Framework-agnostic apps can use the action client directly with any EIP-1193-ish
+provider:
 
 ```ts
-import { useAccount, useSendTransaction } from "wagmi";
-import { parseEther } from "viem";
+import { createTopazIdClient } from "@topazdex/id-connect/actions";
 
-const { address } = useAccount(); // the user's Topaz ID smart wallet
+const topazClient = await createTopazIdClient({
+  provider,
+  account,
+  chainId: 56,
+});
 
-const { sendTransactionAsync } = useSendTransaction();
-await sendTransactionAsync({ to, value: parseEther("0.01"), chainId: 56 });
-// Topaz ID pops a consent window; the user approves every action.
+await topazClient.sendCalls({ calls: [approvalCall, swapCall] });
 ```
+
+Topaz ID still works with standard wagmi calls for simple sends, but the client
+above is the recommended path for production dapps that need smart-wallet-safe
+batching, native-value transactions, or aggregator calldata execution.
+
+Two rules keep transactions routing through the smart wallet reliably:
+
+- **Sign and send with this client (or plain wagmi) — never `@privy-io/react-auth`
+  signing hooks.** Those are embedded-wallet-only and execute from the underlying
+  Privy EOA instead of the user's Topaz ID smart wallet.
+- **Every action opens a Topaz ID consent window; the user approves each one.**
+  Trigger sends from a direct user interaction (a button click) so browsers don't
+  block the popup — a send fired after a long `await` chain can be popup-blocked.
+  Prefer batching an approval + action into one `sendCalls` bundle: one popup, one
+  approval, atomic execution.
 
 The connected account is a **smart contract wallet** (Kernel/ZeroDev on BNB Chain),
 which differs from a plain EOA in two ways worth knowing:

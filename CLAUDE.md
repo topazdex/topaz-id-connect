@@ -26,8 +26,9 @@ is exactly what CI (`.github/workflows/ci.yml`) runs on push/PR to `main`.
 | --- | --- | --- |
 | `.` | `src/index.ts` | constants + profile helpers — **pure fetch, zero framework deps** |
 | `./connectors` | `src/connectors.ts` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN` |
+| `./actions` | `src/actions.ts` | `createTopazIdClient`, `txCall`, `contractCall`, `isTopazIdConnectorId` — viem only, no framework deps |
 | `./rainbow-kit` | `src/rainbow-kit.ts` | **deprecated** alias of `./connectors` (back-compat only) |
-| `./react` | `src/react.tsx` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdProfile` |
+| `./react` | `src/react.tsx` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdClient`, `useTopazIdProfile` |
 | `./privy` | `src/privy.tsx` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `topazIdLoginMethod` |
 
 Shared: `src/constants.ts`, `src/profile.ts`.

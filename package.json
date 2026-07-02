@@ -13,6 +13,9 @@
       "connectors": [
         "./dist/connectors.d.ts"
       ],
+      "actions": [
+        "./dist/actions.d.ts"
+      ],
       "rainbow-kit": [
         "./dist/rainbow-kit.d.ts"
       ],
@@ -74,6 +77,16 @@
       "require": {
         "types": "./dist/connectors.d.cts",
         "default": "./dist/connectors.cjs"
+      }
+    },
+    "./actions": {
+      "import": {
+        "types": "./dist/actions.d.ts",
+        "default": "./dist/actions.js"
+      },
+      "require": {
+        "types": "./dist/actions.d.cts",
+        "default": "./dist/actions.cjs"
       }
     },
     "./rainbow-kit": {

@@ -4,6 +4,7 @@ export default defineConfig({
   entry: [
     "src/index.ts",
     "src/connectors.ts",
+    "src/actions.ts",
     "src/rainbow-kit.ts",
     "src/react.tsx",
     "src/privy.tsx",
