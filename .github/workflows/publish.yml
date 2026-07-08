@@ -20,8 +20,10 @@ jobs:
         with:
           node-version: "22"
 
-      # Trusted publishing (OIDC) requires npm >= 11.5.1
-      - run: npm install -g npm@latest
+      # Trusted publishing (OIDC) needs npm >= 11.5.1. Pinned to 11.x on purpose:
+      # npm 12.0.0's provenance path throws "Cannot find module 'sigstore'" after a
+      # global self-install on the runner, which breaks `npm publish`.
+      - run: npm install -g npm@11.18.0
       - run: npm --version
 
       - run: corepack enable
