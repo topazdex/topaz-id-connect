@@ -60,6 +60,37 @@ export interface TopazIdSendCallsParameters {
   atomicRequired?: boolean;
 }
 
+/**
+ * Subset of a raw `eth_getTransactionReceipt` result. Fields are hex-encoded, as
+ * the RPC returns them — check `status` (`"0x1"` success / `"0x0"` reverted).
+ */
+export interface TopazIdTransactionReceipt {
+  transactionHash: Hex;
+  status: Hex;
+  blockHash: Hex;
+  blockNumber: Hex;
+  from: Address;
+  /** `null` for contract-creation transactions. */
+  to: Address | null;
+  gasUsed: Hex;
+  logs: readonly unknown[];
+}
+
+export interface WaitForReceiptOptions {
+  /** Total time to poll before giving up and resolving `null`. Default `30_000`ms. */
+  timeout?: number;
+  /** Delay between polls. Default `1_500`ms. */
+  pollingInterval?: number;
+  /** Abort the wait early (e.g. on component unmount). */
+  signal?: AbortSignal;
+}
+
+export interface WaitForTopazIdReceiptParameters extends WaitForReceiptOptions {
+  provider: TopazIdProviderLike;
+  /** Transaction hash returned by a Topaz ID send. */
+  hash: Hex;
+}
+
 export interface TopazIdClient {
   account: Address;
   chainId: number;
@@ -73,6 +104,17 @@ export interface TopazIdClient {
    */
   sendCalls(parameters: TopazIdSendCallsParameters | readonly (TopazIdCall | TopazIdContractCall)[]): Promise<Hex>;
   writeContract(call: TopazIdContractCall): Promise<Hex>;
+  /**
+   * Poll `eth_getTransactionReceipt` for a hash this client returned until the
+   * receipt is available or `timeout` elapses. Resolves to `null` on timeout —
+   * some smart-wallet sends return an id the RPC never resolves, so treat the
+   * receipt as best-effort and fall back to re-reading app state rather than
+   * blocking the UI on it. See {@link waitForTopazIdReceipt}.
+   */
+  waitForReceipt(
+    hash: Hex,
+    options?: WaitForReceiptOptions,
+  ): Promise<TopazIdTransactionReceipt | null>;
 }
 
 interface PrivySmartWalletCall {
@@ -160,6 +202,28 @@ function isBatchUnsupported(error: unknown): boolean {
   );
 }
 
+const DEFAULT_RECEIPT_TIMEOUT_MS = 30_000;
+const DEFAULT_RECEIPT_POLL_INTERVAL_MS = 1_500;
+
+function abortError(): DOMException {
+  return new DOMException("The Topaz ID receipt wait was aborted.", "AbortError");
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(abortError());
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(abortError());
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /**
  * Whether a wagmi connector id belongs to Topaz ID. Pass `appId` when your app
  * configures the connector with a custom app id (e.g. a staging app).
@@ -174,10 +238,10 @@ export function isTopazIdConnectorId(
 /**
  * Create a high-level client for the Topaz ID smart wallet. Wraps Privy's
  * `privy_sendSmartWalletTx` RPC so partners get `sendTransaction`, `sendCalls`,
- * and `writeContract` without hand-rolling payloads: native `value` is converted
- * to the wire format the Topaz popup accepts, and multiple calls batch into one
- * atomic operation (with a sequential per-call fallback when the wallet rejects
- * the bundle — see {@link TopazIdSendCallsParameters.atomicRequired}).
+ * `writeContract`, and `waitForReceipt` without hand-rolling payloads: native
+ * `value` is converted to the wire format the Topaz popup accepts, and multiple
+ * calls batch into one atomic operation (with a sequential per-call fallback when
+ * the wallet rejects the bundle — see {@link TopazIdSendCallsParameters.atomicRequired}).
  */
 export async function createTopazIdClient(options: TopazIdClientOptions): Promise<TopazIdClient> {
   const account = await resolveAccount(options.provider, options.account);
@@ -250,7 +314,45 @@ export async function createTopazIdClient(options: TopazIdClientOptions): Promis
     writeContract(call) {
       return sendPrivySmartWalletTx([call]);
     },
+    waitForReceipt(hash, receiptOptions) {
+      return waitForTopazIdReceipt({ provider: options.provider, hash, ...receiptOptions });
+    },
   };
+}
+
+/**
+ * Poll `eth_getTransactionReceipt` until the receipt is available or `timeout`
+ * elapses, resolving to `null` on timeout. Topaz ID's smart-wallet sends usually
+ * return a real transaction hash, but some flows return an id the RPC never
+ * resolves — so the receipt is best-effort. On timeout, fall back to re-reading
+ * your app state (balances, allowances) rather than blocking the UI. Pass a
+ * `signal` to cancel the wait (e.g. on component unmount); an abort re-throws an
+ * `AbortError`.
+ *
+ * @example
+ * const hash = await topazClient.sendTransaction(call);
+ * const receipt = await waitForTopazIdReceipt({ provider, hash, timeout: 20_000 });
+ * if (receipt?.status === "0x1") // confirmed
+ */
+export async function waitForTopazIdReceipt(
+  parameters: WaitForTopazIdReceiptParameters,
+): Promise<TopazIdTransactionReceipt | null> {
+  const { provider, hash, signal } = parameters;
+  const timeout = parameters.timeout ?? DEFAULT_RECEIPT_TIMEOUT_MS;
+  const pollingInterval = parameters.pollingInterval ?? DEFAULT_RECEIPT_POLL_INTERVAL_MS;
+  const deadline = Date.now() + timeout;
+
+  for (;;) {
+    if (signal?.aborted) throw abortError();
+    const receipt = await provider.request({
+      method: "eth_getTransactionReceipt",
+      params: [hash],
+    });
+    if (receipt != null) return receipt as TopazIdTransactionReceipt;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return null;
+    await delay(Math.min(pollingInterval, remaining), signal);
+  }
 }
 
 /**

@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { erc20Abi, parseEther, type Address } from "viem";
+import { erc20Abi, parseEther, type Address, type Hex } from "viem";
 import {
   contractCall,
   createTopazIdClient,
   isTopazIdConnectorId,
   txCall,
+  waitForTopazIdReceipt,
   type TopazIdProviderLike,
 } from "./actions";
 import { TOPAZ_ID_CONNECTOR_ID } from "./constants";
@@ -185,5 +186,97 @@ describe("Topaz ID action client", () => {
     expect(isTopazIdConnectorId("some-other-wallet")).toBe(false);
     expect(isTopazIdConnectorId(undefined)).toBe(false);
     expect(isTopazIdConnectorId("staging-app-id", "staging-app-id")).toBe(true);
+  });
+});
+
+const receiptHash = "0xdeadbeef" as Hex;
+const receipt = { transactionHash: receiptHash, status: "0x1" };
+
+function receiptProvider(nullsBeforeReceipt: number): MockProvider {
+  let polls = 0;
+  return {
+    request: vi.fn(async ({ method }) => {
+      if (method === "eth_accounts") return [account];
+      if (method === "eth_getTransactionReceipt") {
+        polls += 1;
+        return polls > nullsBeforeReceipt ? receipt : null;
+      }
+      return "0xabc";
+    }),
+  };
+}
+
+describe("waitForTopazIdReceipt", () => {
+  it("polls until the receipt appears", async () => {
+    // #given a provider that returns null twice, then the receipt
+    const p = receiptProvider(2);
+
+    // #when
+    const result = await waitForTopazIdReceipt({
+      provider: p,
+      hash: receiptHash,
+      pollingInterval: 1,
+    });
+
+    // #then it returns the receipt after polling
+    expect(result).toEqual(receipt);
+    expect(p.request).toHaveBeenCalledWith({
+      method: "eth_getTransactionReceipt",
+      params: [receiptHash],
+    });
+    expect(p.request).toHaveBeenCalledTimes(3);
+  });
+
+  it("resolves null when the receipt never resolves within the timeout", async () => {
+    // #given a provider whose receipt never resolves
+    const p = receiptProvider(Number.POSITIVE_INFINITY);
+
+    // #when the timeout elapses
+    const result = await waitForTopazIdReceipt({
+      provider: p,
+      hash: receiptHash,
+      timeout: 10,
+      pollingInterval: 2,
+    });
+
+    // #then it gives up rather than hanging
+    expect(result).toBeNull();
+  });
+
+  it("polls at least once even with a zero timeout", async () => {
+    // #given a provider whose receipt is not yet available
+    const p = receiptProvider(Number.POSITIVE_INFINITY);
+
+    // #when timeout is zero
+    const result = await waitForTopazIdReceipt({ provider: p, hash: receiptHash, timeout: 0 });
+
+    // #then one attempt is made, then it returns null
+    expect(result).toBeNull();
+    expect(p.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws AbortError when the signal is already aborted", async () => {
+    // #given an aborted signal
+    const p = receiptProvider(0);
+    const controller = new AbortController();
+    controller.abort();
+
+    // #when / #then it rejects before polling
+    await expect(
+      waitForTopazIdReceipt({ provider: p, hash: receiptHash, signal: controller.signal }),
+    ).rejects.toThrow(/aborted/i);
+    expect(p.request).not.toHaveBeenCalled();
+  });
+
+  it("is exposed as a client method bound to the client's provider", async () => {
+    // #given a client whose provider resolves the receipt on the first poll
+    const p = receiptProvider(0);
+    const client = await createTopazIdClient({ provider: p, account, chainId: 56 });
+
+    // #when
+    const result = await client.waitForReceipt(receiptHash);
+
+    // #then
+    expect(result).toEqual(receipt);
   });
 });

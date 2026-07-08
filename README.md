@@ -18,6 +18,15 @@ Next.js + RainbowKit app demonstrating connect, profile display, smart-wallet
 sends, and a batched approve + swap.
 Source: [topazdex/topaz-id-connect-demo](https://github.com/topazdex/topaz-id-connect-demo).
 
+## New in 0.5
+
+`0.5` adds `waitForTopazIdReceipt` (and `client.waitForReceipt(hash)`) — a receipt
+poll with a timeout that resolves to `null` instead of hanging when a smart-wallet
+send returns an id `eth_getTransactionReceipt` can't resolve. The send guidance now
+recommends routing **all** contract calls through the action client. Purely
+additive. As with prior minors, `^0.4` consumers don't automatically cross to
+`0.5` — upgrade deliberately.
+
 ## New in 0.4
 
 `0.4` adds the **smart-wallet action client** — the recommended way to send
@@ -240,12 +249,15 @@ Plain object literals work for every call; the optional `txCall(...)` /
 `contractCall(...)` builders do the same thing but validate the target address
 eagerly, so a typo fails before a consent popup ever opens.
 
-Plain wagmi (`useSendTransaction` / `useWriteContract`) still works for calls
-that carry **no native BNB** — approvals and most contract writes. Anything with
-a native `value` must go through this client: wagmi hex-encodes `value`, and the
-Topaz ID popup rejects hex quantity strings. That mismatch is why value-bearing
-transactions fail with a "can't estimate cost" popup on raw connector
-integrations while approvals sail through.
+The client is the recommended path for **every** send. A native `value` **must**
+go through it: wagmi hex-encodes `value` and the Topaz ID popup rejects hex
+quantity strings — that mismatch is why value-bearing transactions fail with a
+"can't estimate cost" popup on raw connector integrations. Zero-value calls
+(approvals, most contract writes) _can_ still go through plain wagmi
+(`useSendTransaction` / `useWriteContract`), but routing everything through the
+client keeps a single code path and sidesteps the encoding pitfall. If a contract
+write reverts unexpectedly on plain wagmi, switch it to the client before
+debugging further.
 
 A few rules keep transactions routing through the smart wallet reliably:
 
@@ -269,9 +281,11 @@ A few rules keep transactions routing through the smart wallet reliably:
   to get the batch error instead of the fallback.
 - **Treat receipt lookups as best-effort.** The returned hash is usually a
   transaction hash, but some smart-wallet flows return an id that
-  `eth_getTransactionReceipt` cannot resolve. Poll for the receipt with a
-  timeout and fall back to re-reading your app state (balances, allowances)
-  rather than blocking the UI on the receipt alone.
+  `eth_getTransactionReceipt` cannot resolve. Use `client.waitForReceipt(hash)`
+  (or `waitForTopazIdReceipt({ provider, hash })` outside React) — it polls with a
+  timeout and resolves to `null` instead of hanging. On `null`, fall back to
+  re-reading your app state (balances, allowances) rather than blocking the UI on
+  the receipt alone.
 
 The connected account is a **smart contract wallet** (Kernel/ZeroDev on BNB Chain),
 which differs from a plain EOA in two ways worth knowing:
@@ -412,7 +426,7 @@ both, label them **Smart** (`address`) and **Legacy** (`signerAddress`) — see
 | --- | --- |
 | `@topazdex/id-connect` | `TOPAZ_ID_APP_ID`, `TOPAZ_ID_CONNECTOR_ID`, `TOPAZ_ID_CHAIN_ID`, `TOPAZ_ID_NAME`, `TOPAZ_ID_ICON_URL`, `TOPAZ_ID_BASE_URL`, `TOPAZ_ID_SMART_WALLET_LABEL`, `TOPAZ_ID_LEGACY_WALLET_LABEL`, `TOPAZ_ID_WALLET_MODES`, `topazIdWalletMode`, `TopazIdWalletMode`, `TopazIdWalletModeInfo`, `fetchTopazIdProfile`, `displayNameForWallet`, `avatarForWallet`, `shortenAddress`, `TopazIdProfile` |
 | `@topazdex/id-connect/connectors` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN`, `TopazIdConnectorOptions` |
-| `@topazdex/id-connect/actions` | `createTopazIdClient`, `txCall`, `contractCall`, `isTopazIdConnectorId`, `TopazIdClient`, `TopazIdClientOptions`, `TopazIdCall`, `TopazIdContractCall`, `TopazIdSendCallsParameters`, `TopazIdCapabilities`, `TopazIdProviderLike` |
+| `@topazdex/id-connect/actions` | `createTopazIdClient`, `waitForTopazIdReceipt`, `txCall`, `contractCall`, `isTopazIdConnectorId`, `TopazIdClient`, `TopazIdClientOptions`, `TopazIdCall`, `TopazIdContractCall`, `TopazIdSendCallsParameters`, `TopazIdCapabilities`, `TopazIdProviderLike`, `TopazIdTransactionReceipt`, `WaitForReceiptOptions`, `WaitForTopazIdReceiptParameters` |
 | `@topazdex/id-connect/rainbow-kit` | *Deprecated alias of `/connectors`* |
 | `@topazdex/id-connect/react` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdClient`, `useTopazIdProfile` |
 | `@topazdex/id-connect/privy` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `useTopazIdAccount`, `topazIdLoginMethod` |
