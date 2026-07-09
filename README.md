@@ -18,16 +18,11 @@ Next.js + RainbowKit app demonstrating connect, profile display, smart-wallet
 sends, and a batched approve + swap.
 Source: [topazdex/topaz-id-connect-demo](https://github.com/topazdex/topaz-id-connect-demo).
 
-## New in 0.5
-
-`0.5` adds `waitForTopazIdReceipt` (and `client.waitForReceipt(hash)`) — a receipt
-poll with a timeout that resolves to `null` instead of hanging when a smart-wallet
-send returns an id `eth_getTransactionReceipt` can't resolve. The send guidance now
-recommends routing **all** contract calls through the action client. Purely
-additive. As with prior minors, `^0.4` consumers don't automatically cross to
-`0.5` — upgrade deliberately.
-
 ## New in 0.4
+
+`0.4.3` adds `waitForTopazIdReceipt` / `client.waitForReceipt(hash)` — a receipt
+poll with a timeout that resolves to `null` instead of hanging when a smart-wallet
+send returns an id `eth_getTransactionReceipt` can't resolve.
 
 `0.4` adds the **smart-wallet action client** — the recommended way to send
 transactions: `useTopazIdClient` on `/react`, and `createTopazIdClient` on the
