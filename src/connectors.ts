@@ -3,11 +3,9 @@ import {
   toPrivyWalletConnector,
 } from "@privy-io/cross-app-connect/rainbow-kit";
 import type { Wallet, WalletDetailsParams } from "@rainbow-me/rainbowkit";
-import { bsc } from "viem/chains";
 import { TOPAZ_ID_APP_ID, TOPAZ_ID_ICON_URL, TOPAZ_ID_NAME } from "./constants";
 
-/** BNB Chain (id 56) — the chain Topaz ID wallets operate on. */
-export const TOPAZ_ID_CHAIN = bsc;
+export { TOPAZ_ID_CHAIN, TOPAZ_ID_CHAINS } from "./chains";
 
 export interface TopazIdConnectorOptions {
   /** Override Topaz ID's app id (e.g. to target a staging app). */
@@ -23,9 +21,9 @@ export interface TopazIdConnectorOptions {
   /**
    * Selects the **Smart** wallet mode (the user's smart contract wallet) when
    * `true` — the default, and the user's canonical on-chain identity; sends route
-   * as gas-sponsored UserOperations through Topaz ID. Set `false` for **Legacy**
-   * mode, which exposes the embedded Privy **signer EOA** (signer-only — not where
-   * the user holds funds), kept for backward compatibility with existing dapps.
+   * as UserOperations through Topaz ID. Set `false` for **Legacy** mode, which
+   * exposes the embedded Privy **signer EOA** (signer-only — not where the user
+   * holds funds), kept for backward compatibility with existing dapps.
    *
    * @remarks Backed by Privy cross-app `smartWalletMode`, which Privy marks
    * `@experimental`; its behavior can change between `@privy-io/cross-app-connect`
@@ -38,6 +36,9 @@ export interface TopazIdConnectorOptions {
  * A RainbowKit wallet for Topaz ID. Drop into `connectorsForWallets`. By default
  * the connected account is the user's Topaz ID **smart contract wallet**; pass
  * `{ smartWalletMode: false }` for **Legacy** mode (the signer EOA).
+ *
+ * The chains come from your wagmi config: list any subset of `TOPAZ_ID_CHAINS`
+ * (the first one is the chain Topaz ID connects on).
  *
  * @example
  * import { connectorsForWallets } from "@rainbow-me/rainbowkit";
@@ -76,13 +77,17 @@ export function topazIdWallet(
  * connected account is the user's Topaz ID **smart contract wallet**; pass
  * `{ smartWalletMode: false }` for **Legacy** mode (the signer EOA).
  *
+ * The chains come from your wagmi config: list any subset of `TOPAZ_ID_CHAINS`
+ * (the first one is the chain Topaz ID connects on).
+ *
  * @example
  * import { createConfig, http } from "wagmi";
- * import { topazIdConnector, TOPAZ_ID_CHAIN } from "@topazdex/id-connect/connectors";
+ * import { topazIdConnector } from "@topazdex/id-connect/connectors";
+ * import { base, robinhood } from "@topazdex/id-connect/chains";
  *
  * export const wagmiConfig = createConfig({
- *   chains: [TOPAZ_ID_CHAIN],
- *   transports: { [TOPAZ_ID_CHAIN.id]: http() },
+ *   chains: [base, robinhood],
+ *   transports: { [base.id]: http(), [robinhood.id]: http() },
  *   connectors: [topazIdConnector()],
  *   ssr: true,
  * });

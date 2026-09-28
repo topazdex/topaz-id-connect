@@ -24,14 +24,22 @@ is exactly what CI (`.github/workflows/ci.yml`) runs on push/PR to `main`.
 
 | Subpath | Source | Exports |
 | --- | --- | --- |
-| `.` | `src/index.ts` | constants + profile helpers — **pure fetch, zero framework deps** |
-| `./connectors` | `src/connectors.ts` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN` |
-| `./actions` | `src/actions.ts` | `createTopazIdClient`, `txCall`, `contractCall`, `isTopazIdConnectorId` — viem only, no framework deps |
+| `.` | `src/index.ts` | constants (app id, chain ids + per-chain info, gas sponsorship) + profile helpers — **pure fetch, zero framework deps** |
+| `./chains` | `src/chains.ts` | viem `Chain` objects: `TOPAZ_ID_CHAINS`, `bsc`, `robinhood`, `base`, `mainnet`, `arc`, `topazIdChain` — viem only |
+| `./connectors` | `src/connectors.ts` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN`, `TOPAZ_ID_CHAINS` — wagmi/RainbowKit |
+| `./provider` | `src/provider.ts` | `createTopazIdProvider`, `connectTopazId`, `disconnectTopazId` — framework-free EIP-1193 provider (cross-app-connect + viem, no wagmi) |
+| `./actions` | `src/actions.ts` | `createTopazIdClient`, `waitForTopazIdReceipt`, `txCall`, `contractCall`, value-precision helpers, `isTopazIdConnectorId` — viem only, no framework deps |
 | `./rainbow-kit` | `src/rainbow-kit.ts` | **deprecated** alias of `./connectors` (back-compat only) |
 | `./react` | `src/react.tsx` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdClient`, `useTopazIdProfile` |
-| `./privy` | `src/privy.tsx` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `topazIdLoginMethod` |
+| `./privy` | `src/privy.tsx` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `useTopazIdAccount`, `topazIdLoginMethod` |
 
 Shared: `src/constants.ts`, `src/profile.ts`.
+
+Topaz ID runs on five chains (BNB 56, Robinhood 4663, Base 8453, Ethereum 1, Arc
+5042). Gas is sponsored on BNB only; the smart wallet pays its own gas elsewhere.
+Keep `TOPAZ_ID_CHAIN_IDS`/`TOPAZ_ID_CHAIN_INFO` (root) and `TOPAZ_ID_CHAINS`
+(`./chains`) in sync, and mirror any public API change into the partner-facing skill
+doc at `~/topaz/topaz-skill/developers/topaz-id-connect.md`.
 
 ## Conventions
 

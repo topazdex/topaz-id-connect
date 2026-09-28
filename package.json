@@ -1,7 +1,7 @@
 {
   "name": "@topazdex/id-connect",
   "version": "0.4.3",
-  "description": "Add Topaz ID — a BNB Chain smart-wallet global account — to your dapp in one line.",
+  "description": "Add Topaz ID — a smart-wallet global account on BNB Chain, Robinhood Chain, Base, Ethereum and Arc — to your dapp in one line.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -10,8 +10,14 @@
   "types": "./dist/index.d.ts",
   "typesVersions": {
     "*": {
+      "chains": [
+        "./dist/chains.d.ts"
+      ],
       "connectors": [
         "./dist/connectors.d.ts"
+      ],
+      "provider": [
+        "./dist/provider.d.ts"
       ],
       "actions": [
         "./dist/actions.d.ts"
@@ -51,6 +57,10 @@
     "wagmi",
     "rainbowkit",
     "bnb-chain",
+    "robinhood-chain",
+    "base",
+    "ethereum",
+    "arc",
     "wallet"
   ],
   "files": [
@@ -69,6 +79,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./chains": {
+      "import": {
+        "types": "./dist/chains.d.ts",
+        "default": "./dist/chains.js"
+      },
+      "require": {
+        "types": "./dist/chains.d.cts",
+        "default": "./dist/chains.cjs"
+      }
+    },
     "./connectors": {
       "import": {
         "types": "./dist/connectors.d.ts",
@@ -77,6 +97,16 @@
       "require": {
         "types": "./dist/connectors.d.cts",
         "default": "./dist/connectors.cjs"
+      }
+    },
+    "./provider": {
+      "import": {
+        "types": "./dist/provider.d.ts",
+        "default": "./dist/provider.js"
+      },
+      "require": {
+        "types": "./dist/provider.d.cts",
+        "default": "./dist/provider.cjs"
       }
     },
     "./actions": {
