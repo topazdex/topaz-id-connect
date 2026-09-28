@@ -4,7 +4,7 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { useCallback, useMemo, type ReactNode } from "react";
-import type { Transport } from "viem";
+import type { Chain, Transport } from "viem";
 import {
   cookieStorage,
   cookieToInitialState,
@@ -18,7 +18,8 @@ import {
   WagmiProvider,
 } from "wagmi";
 import { TOPAZ_ID_APP_ID } from "./constants";
-import { topazIdConnector, TOPAZ_ID_CHAIN } from "./connectors";
+import { TOPAZ_ID_CHAIN } from "./chains";
+import { topazIdConnector } from "./connectors";
 import {
   createTopazIdClient,
   isTopazIdConnectorId,
@@ -26,6 +27,8 @@ import {
   type TopazIdProviderLike,
 } from "./actions";
 import { fetchTopazIdProfile, type TopazIdProfile } from "./profile";
+
+const DEFAULT_CHAINS: readonly [Chain, ...Chain[]] = [TOPAZ_ID_CHAIN];
 
 export interface TopazIdProviderProps {
   children: ReactNode;
@@ -37,7 +40,19 @@ export interface TopazIdProviderProps {
    * {@link topazIdConnector}.
    */
   smartWalletMode?: boolean;
-  /** Custom RPC transport for BNB Chain. Defaults to a public `http()` endpoint. */
+  /**
+   * Chains to configure wagmi with — any subset of `TOPAZ_ID_CHAINS` from
+   * `@topazdex/id-connect/chains`. The first entry is the chain Topaz ID connects
+   * on. Defaults to BNB Chain only. Define the array at module scope so its
+   * identity is stable across renders.
+   */
+  chains?: readonly [Chain, ...Chain[]];
+  /**
+   * Per-chain RPC transports. Any chain without one uses `http()`, i.e. the
+   * chain's default public RPC. Define it at module scope.
+   */
+  transports?: Record<number, Transport>;
+  /** @deprecated Use `transports`. Applies to BNB Chain (56) only. */
   transport?: Transport;
   /** Supply your own React Query client. One is created if omitted. */
   queryClient?: QueryClient;
@@ -52,9 +67,10 @@ export interface TopazIdProviderProps {
 }
 
 /**
- * One-line setup for Topaz ID. Wraps your app in a wagmi config (BNB Chain +
- * the Topaz ID connector) and a React Query provider — no `createConfig` or
- * `QueryClientProvider` of your own. Pair with {@link useTopazIdLogin} to connect.
+ * One-line setup for Topaz ID. Wraps your app in a wagmi config (your chosen
+ * Topaz ID chains + the Topaz ID connector) and a React Query provider — no
+ * `createConfig` or `QueryClientProvider` of your own. Pair with
+ * {@link useTopazIdLogin} to connect.
  *
  * Draw the `"use client"` boundary in your app (e.g. a Next.js client component);
  * this library stays framework-agnostic.
@@ -62,25 +78,39 @@ export interface TopazIdProviderProps {
  * @example
  * "use client";
  * import { TopazIdProvider } from "@topazdex/id-connect/react";
+ * import { base, robinhood } from "@topazdex/id-connect/chains";
+ *
+ * const chains = [base, robinhood] as const;
  *
  * export function Providers({ children }: { children: React.ReactNode }) {
- *   return <TopazIdProvider>{children}</TopazIdProvider>;
+ *   return <TopazIdProvider chains={chains}>{children}</TopazIdProvider>;
  * }
  */
 export function TopazIdProvider({
   children,
   appId,
   smartWalletMode,
+  chains = DEFAULT_CHAINS,
+  transports,
   transport,
   queryClient,
   ssr = true,
   cookie,
 }: TopazIdProviderProps) {
+  const chainKey = chains.map((chain) => chain.id).join(",");
+
   const config = useMemo(
     () =>
       createConfig({
-        chains: [TOPAZ_ID_CHAIN],
-        transports: { [TOPAZ_ID_CHAIN.id]: transport ?? http() },
+        chains,
+        transports: Object.fromEntries(
+          chains.map((chain) => [
+            chain.id,
+            transports?.[chain.id] ??
+              (chain.id === TOPAZ_ID_CHAIN.id ? transport : undefined) ??
+              http(),
+          ]),
+        ),
         connectors: [topazIdConnector({ appId, smartWalletMode })],
         ssr,
         storage: ssr
@@ -88,7 +118,7 @@ export function TopazIdProvider({
           : undefined,
         multiInjectedProviderDiscovery: false,
       }),
-    [appId, smartWalletMode, transport, ssr],
+    [appId, smartWalletMode, chainKey, transports, transport, ssr],
   );
 
   const initialState = useMemo(
@@ -111,6 +141,11 @@ export function TopazIdProvider({
 export interface UseTopazIdLoginOptions {
   /** Override Topaz ID's app id (must match the connector you configured). */
   appId?: string;
+  /**
+   * Connect on this chain (one of your wagmi config's chains). Defaults to the
+   * first configured chain.
+   */
+  chainId?: number;
 }
 
 /**
@@ -129,6 +164,7 @@ export function useTopazIdLogin(options: UseTopazIdLoginOptions = {}) {
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
   const appId = options.appId ?? TOPAZ_ID_APP_ID;
+  const chainId = options.chainId;
 
   const connector = useMemo(
     () =>
@@ -138,8 +174,8 @@ export function useTopazIdLogin(options: UseTopazIdLoginOptions = {}) {
   );
 
   const login = useCallback(() => {
-    if (connector) connect({ connector });
-  }, [connect, connector]);
+    if (connector) connect({ connector, ...(chainId == null ? {} : { chainId }) });
+  }, [connect, connector, chainId]);
 
   return { login, logout: disconnect, connector, isPending, error };
 }
@@ -155,20 +191,22 @@ export interface UseTopazIdClientOptions {
  * `client.writeContract` instead of hand-rolling Privy's smart-wallet RPC or
  * worrying about native-value/batch formatting. `data` is `undefined` while the
  * client is loading or when the connected wallet isn't Topaz ID (`isTopazId`).
+ * The client follows the connected chain: after `switchChain` it is re-created
+ * for the new chain.
  *
  * @example
  * const { data: topazClient } = useTopazIdClient();
  * await topazClient?.sendCalls({ calls: [approvalCall, swapCall] });
  */
 export function useTopazIdClient(options: UseTopazIdClientOptions = {}) {
-  const { address, connector } = useAccount();
+  const { address, connector, chainId } = useAccount();
   const appId = options.appId ?? TOPAZ_ID_APP_ID;
   const isTopazId = Boolean(address && isTopazIdConnectorId(connector?.id, appId));
   const connectorClient = useConnectorClient({ connector, query: { enabled: isTopazId } });
   const provider = connectorClient.data;
 
   const query = useQuery<TopazIdClient>({
-    queryKey: ["topaz-id-client", address, provider?.uid],
+    queryKey: ["topaz-id-client", address, chainId, provider?.uid],
     enabled: Boolean(isTopazId && address && provider?.request),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 0,
@@ -192,7 +230,8 @@ export interface UseTopazIdProfileOptions {
 
 /**
  * React Query hook for a wallet's Topaz ID profile. Disabled until `wallet` is
- * defined; cached per lowercased address.
+ * defined; cached per lowercased address. Profiles are chain-independent — the
+ * smart wallet has the same address on every Topaz ID chain.
  *
  * @example
  * const { address } = useAccount();
