@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: [
     "src/index.ts",
+    "src/chains.ts",
     "src/connectors.ts",
     "src/actions.ts",
     "src/rainbow-kit.ts",

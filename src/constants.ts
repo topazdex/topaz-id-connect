@@ -11,8 +11,93 @@ export const TOPAZ_ID_APP_ID = "cmpt1zsgh00rs0cld1hgqc0v7";
  */
 export const TOPAZ_ID_CONNECTOR_ID = TOPAZ_ID_APP_ID;
 
-/** BNB Chain mainnet — the chain Topaz ID smart wallets operate on. */
-export const TOPAZ_ID_CHAIN_ID = 56;
+/**
+ * Every chain id a Topaz ID smart wallet operates on: BNB Chain, Robinhood Chain,
+ * Base, Ethereum, Arc. The wallet has the same address on each chain. viem
+ * `Chain` objects for them live at `@topazdex/id-connect/chains`.
+ */
+export const TOPAZ_ID_CHAIN_IDS = [56, 4663, 8453, 1, 5042] as const;
+
+export type TopazIdChainId = (typeof TOPAZ_ID_CHAIN_IDS)[number];
+
+/** BNB Chain (56) — Topaz ID's hub chain, and the default when none is chosen. */
+export const TOPAZ_ID_CHAIN_ID: TopazIdChainId = 56;
+
+export interface TopazIdChainInfo {
+  id: TopazIdChainId;
+  name: string;
+  /** Symbol of the currency that gas and native `value` are paid in. */
+  nativeCurrency: string;
+  /**
+   * `true` when Topaz ID's paymaster pays gas on this chain, so the user needs
+   * funds only for the `value` they send. `false` means the smart wallet pays gas
+   * from its own native balance and must be funded before it can transact.
+   */
+  gasSponsored: boolean;
+  explorerUrl: string;
+}
+
+/**
+ * Framework-free facts about each Topaz ID chain — name, gas currency, whether
+ * Topaz sponsors gas, and the block explorer. Use it for "fund your wallet with
+ * ETH on Base" copy or a chain picker without importing viem.
+ */
+export const TOPAZ_ID_CHAIN_INFO: Record<TopazIdChainId, TopazIdChainInfo> = {
+  56: {
+    id: 56,
+    name: "BNB Chain",
+    nativeCurrency: "BNB",
+    gasSponsored: true,
+    explorerUrl: "https://bscscan.com",
+  },
+  4663: {
+    id: 4663,
+    name: "Robinhood Chain",
+    nativeCurrency: "ETH",
+    gasSponsored: false,
+    explorerUrl: "https://robin.etherscan.io",
+  },
+  8453: {
+    id: 8453,
+    name: "Base",
+    nativeCurrency: "ETH",
+    gasSponsored: false,
+    explorerUrl: "https://basescan.org",
+  },
+  1: {
+    id: 1,
+    name: "Ethereum",
+    nativeCurrency: "ETH",
+    gasSponsored: false,
+    explorerUrl: "https://etherscan.io",
+  },
+  5042: {
+    id: 5042,
+    name: "Arc",
+    nativeCurrency: "USDC",
+    gasSponsored: false,
+    explorerUrl: "https://explorer.arc.io",
+  },
+};
+
+/** Whether `chainId` is one Topaz ID smart wallets operate on. */
+export function isTopazIdChainId(
+  chainId: number | undefined,
+): chainId is TopazIdChainId {
+  return TOPAZ_ID_CHAIN_IDS.some((id) => id === chainId);
+}
+
+/** Whether Topaz ID's paymaster pays gas on `chainId` (only BNB Chain today). */
+export function isTopazIdGasSponsored(chainId: number | undefined): boolean {
+  return isTopazIdChainId(chainId) && TOPAZ_ID_CHAIN_INFO[chainId].gasSponsored;
+}
+
+/** {@link TopazIdChainInfo} for a Topaz ID chain, or `undefined` for any other id. */
+export function topazIdChainInfo(
+  chainId: number | undefined,
+): TopazIdChainInfo | undefined {
+  return isTopazIdChainId(chainId) ? TOPAZ_ID_CHAIN_INFO[chainId] : undefined;
+}
 
 export const TOPAZ_ID_NAME = "Topaz ID";
 
@@ -60,7 +145,7 @@ export const TOPAZ_ID_WALLET_MODES: Record<
   smart: {
     mode: "smart",
     label: TOPAZ_ID_SMART_WALLET_LABEL,
-    description: "Gas-free smart wallet (recommended)",
+    description: "Smart wallet (recommended; gas-free on BNB Chain)",
   },
   legacy: {
     mode: "legacy",
