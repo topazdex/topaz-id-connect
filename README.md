@@ -188,16 +188,19 @@ consent window where the user signs in — no new wallet is created.
 
 ```ts
 import { topazIdConnector } from "@topazdex/id-connect/connectors";
-import { TOPAZ_ID_CHAINS } from "@topazdex/id-connect/chains";
+import { arc, base, bsc } from "@topazdex/id-connect/chains";
 import { createConfig, http } from "wagmi";
 
 export const wagmiConfig = createConfig({
-  chains: TOPAZ_ID_CHAINS, // or any subset, e.g. [arc]
-  transports: Object.fromEntries(TOPAZ_ID_CHAINS.map((chain) => [chain.id, http()])),
+  chains: [bsc, base, arc], // any subset of TOPAZ_ID_CHAINS; the first is the connect chain
+  transports: { [bsc.id]: http(), [base.id]: http(), [arc.id]: http() },
   connectors: [topazIdConnector()],
   ssr: true,
 });
 ```
+
+wagmi types `transports` by the literal chain ids, so list them explicitly as
+above rather than building the object with `Object.fromEntries`.
 
 ## Without wagmi (any framework)
 
