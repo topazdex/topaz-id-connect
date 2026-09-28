@@ -1,7 +1,7 @@
 {
   "name": "@topazdex/id-connect",
   "version": "0.4.3",
-  "description": "Add Topaz ID — a BNB Chain smart-wallet global account — to your dapp in one line.",
+  "description": "Add Topaz ID — a smart-wallet global account on BNB Chain, Robinhood Chain, Base, Ethereum and Arc — to your dapp in one line.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -57,6 +57,10 @@
     "wagmi",
     "rainbowkit",
     "bnb-chain",
+    "robinhood-chain",
+    "base",
+    "ethereum",
+    "arc",
     "wallet"
   ],
   "files": [

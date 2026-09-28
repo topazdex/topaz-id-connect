@@ -1,15 +1,35 @@
 # @topazdex/id-connect
 
-Add **Topaz ID** — a BNB Chain **smart-wallet** global account — to your dapp as a
-one-click login. Users sign in with their existing Topaz ID account
-([id.topazdex.com](https://id.topazdex.com)) — email, Google, or an external wallet —
-and connect with their Topaz ID **smart contract wallet** (Kernel/ZeroDev). No seed
-phrase, no extension, and **no Privy app of your own**.
+Add **Topaz ID** — a smart-wallet global account — to your dapp as a one-click
+login on **BNB Chain, Robinhood Chain, Base, Ethereum, and Arc**. Users sign in
+with their existing Topaz ID account ([id.topazdex.com](https://id.topazdex.com))
+— email, Google, or an external wallet — and connect with their Topaz ID **smart
+contract wallet** (Kernel/ZeroDev). No seed phrase, no extension, **no Privy app
+of your own**, and the same wallet address on every chain.
 
 Topaz ID is built on [Privy's global wallets](https://docs.privy.io/wallets/global-wallets/overview).
 Your app is the *requester* and references Topaz ID's public app id — that's the
 whole integration. You don't need a Privy account, and your domain does **not**
 need to be allowlisted by Topaz ID.
+
+## Chains
+
+| Chain | Id | Gas | Import from `@topazdex/id-connect/chains` |
+| --- | --- | --- | --- |
+| BNB Chain | 56 | **Sponsored by Topaz ID** | `bsc` |
+| Robinhood Chain | 4663 | Paid by the wallet in ETH | `robinhood` |
+| Base | 8453 | Paid by the wallet in ETH | `base` |
+| Ethereum | 1 | Paid by the wallet in ETH | `mainnet` |
+| Arc | 5042 | Paid by the wallet in USDC (18-decimal native) | `arc` |
+
+`TOPAZ_ID_CHAINS` is all five (BNB Chain first). Use any subset — one chain or
+several. **The first chain you list is the one Topaz ID connects on**; the user
+can switch to any other chain you listed. The wallet is the same address on
+every chain, so profiles, allowlists, and balances key on one identity.
+
+On BNB Chain the user needs funds only for the `value` they send. On the other
+four chains the smart wallet pays its own gas, so it must hold that chain's
+native currency before it can transact — see [Gas and funding](#gas-and-funding).
 
 ## Demo
 
@@ -18,66 +38,46 @@ Next.js + RainbowKit app demonstrating connect, profile display, smart-wallet
 sends, and a batched approve + swap.
 Source: [topazdex/topaz-id-connect-demo](https://github.com/topazdex/topaz-id-connect-demo).
 
-## New in 0.4
-
-`0.4.3` adds `waitForTopazIdReceipt` / `client.waitForReceipt(hash)` — a receipt
-poll with a timeout that resolves to `null` instead of hanging when a smart-wallet
-send returns an id `eth_getTransactionReceipt` can't resolve.
-
-`0.4` adds the **smart-wallet action client** — the recommended way to send
-transactions: `useTopazIdClient` on `/react`, and `createTopazIdClient` on the
-new `/actions` entry for non-React apps. See
-[Using the wallet](#using-the-wallet). Purely additive: existing integrations
-keep working unchanged.
-
-If value-bearing transactions were failing for you on plain wagmi (the consent
-popup can't estimate the cost, and submitting errors), this client is the fix —
-upgrade to `^0.4.1` and route sends through it. As with 0.3, `^0.3` consumers
-don't automatically cross the minor — upgrade deliberately.
-
-## Upgrading to 0.3.0
-
-`0.3.0` makes Topaz ID **smart-account-first**: the connected account is now the
-user's **smart contract wallet** (Kernel/ZeroDev) — their identity on
-id.topazdex.com — instead of the embedded signer EOA. Most apps need no code change
-(you already read `useAccount().address`), but note:
-
-- **The address changes.** `useAccount().address` is now the smart wallet, so
-  anything keyed on the old EOA (allowlists, prior balances) won't carry over.
-- **Sends are gas-sponsored UserOperations**, and **signatures are ERC-1271/6492,
-  not ECDSA** — see [Using the wallet](#using-the-wallet). Update SIWE/`ecrecover`
-  backends to an ERC-1271-aware check.
-- **Opt out:** pass `{ smartWalletMode: false }` to `topazIdConnector()`,
-  `topazIdWallet()`, or `TopazIdProvider` to keep the **Legacy** signer-EOA mode —
-  see [Smart vs Legacy wallets](#smart-vs-legacy-wallets).
-
-`^0.2` consumers don't automatically cross the minor — you upgrade deliberately.
-
 ## Install
 
 ```bash
-yarn add @topazdex/id-connect @privy-io/cross-app-connect wagmi viem \
-  @tanstack/react-query
+yarn add @topazdex/id-connect @privy-io/cross-app-connect viem
 ```
 
-Add `@rainbow-me/rainbowkit` if you use the RainbowKit picker, or
-`@privy-io/react-auth` if your app is itself a Privy app. All peer dependencies
-are optional and only pulled in by the entrypoints that need them — see
-[Peer dependencies](#peer-dependencies).
+Add `wagmi` + `@tanstack/react-query` for the React/wagmi entries,
+`@rainbow-me/rainbowkit` for the RainbowKit picker, or `@privy-io/react-auth` if
+your app is itself a Privy app. All peer dependencies are optional and only pulled
+in by the entrypoints that need them — see [Peer dependencies](#peer-dependencies).
 
-> `@privy-io/cross-app-connect` pins `viem@2.52.0`. Match it to avoid peer
-> warnings.
+> `@privy-io/cross-app-connect` pins an exact `viem` version (`2.52.0` at the time
+> of writing). Match it to avoid peer warnings.
 
-## Quick start
+## Pick an integration path
 
-The fastest path: wrap your app in `TopazIdProvider` (it sets up wagmi for BNB
-Chain, the Topaz ID connector, and React Query for you), then connect with
-`useTopazIdLogin`. No `createConfig`, no RainbowKit.
+| Your app | Use | Section |
+| --- | --- | --- |
+| React, no wagmi config yet | `TopazIdProvider` + `useTopazIdLogin` | [Quick start](#quick-start-react) |
+| React with RainbowKit | `topazIdWallet()` in your wallet list | [RainbowKit](#rainbowkit) |
+| React with your own wagmi config | `topazIdConnector()` | [Plain wagmi](#plain-wagmi-no-rainbowkit) |
+| Anything else (Vue, Svelte, vanilla, viem only) | `createTopazIdProvider()` + `createTopazIdClient()` | [Without wagmi](#without-wagmi-any-framework) |
+| Already a Privy app | `/privy` cross-app login | [Already using Privy?](#already-using-privy) |
+
+Every path ends with the same [action client](#sending-transactions) for sends.
+
+## Quick start (React)
+
+Wrap your app in `TopazIdProvider` (it sets up wagmi for your chains, the Topaz
+ID connector, and React Query), then connect with `useTopazIdLogin`. No
+`createConfig`, no RainbowKit.
 
 ```tsx
 // app/providers.tsx
 "use client";
 import { TopazIdProvider } from "@topazdex/id-connect/react";
+import { base, robinhood } from "@topazdex/id-connect/chains";
+
+// Module scope, so the array's identity is stable across renders.
+const chains = [base, robinhood] as const; // first entry = the chain Topaz ID connects on
 
 export function Providers({
   children,
@@ -86,9 +86,15 @@ export function Providers({
   children: React.ReactNode;
   cookie?: string | null;
 }) {
-  return <TopazIdProvider cookie={cookie}>{children}</TopazIdProvider>;
+  return (
+    <TopazIdProvider chains={chains} cookie={cookie}>
+      {children}
+    </TopazIdProvider>
+  );
 }
 ```
+
+Omit `chains` for BNB Chain only.
 
 ```tsx
 // app/layout.tsx (Next.js App Router) — pass the cookie for clean SSR hydration
@@ -124,20 +130,25 @@ export function SignIn() {
 }
 ```
 
-`TopazIdProvider` accepts `appId` (target a staging app), `smartWalletMode`
-(defaults to `true`; pass `false` for the legacy signer-EOA), `transport` (custom
-RPC), `queryClient` (bring your own), `ssr` (defaults to `true`, enabling wagmi
-cookie storage), and `cookie` (the request cookie header, so a connected wallet
-survives SSR without a flash). Draw the `"use client"` boundary in your app — the
-library stays framework-agnostic.
+`TopazIdProvider` props: `chains` (any subset of `TOPAZ_ID_CHAINS`; default BNB
+Chain), `transports` (per-chain RPC, default `http()` on each chain's public RPC),
+`appId` (target a staging app), `smartWalletMode` (default `true`; `false` for the
+legacy signer EOA), `queryClient` (bring your own), `ssr` (default `true`, enabling
+wagmi cookie storage), and `cookie` (the request cookie header). Draw the
+`"use client"` boundary in your app — the library stays framework-agnostic.
+
+`useTopazIdLogin({ chainId })` connects on a specific configured chain; afterwards
+use wagmi's `useSwitchChain` like any other wallet.
 
 ## RainbowKit
 
 Prefer RainbowKit's wallet picker? Configure wagmi yourself and add the Topaz ID
-wallet. Connector helpers live at `@topazdex/id-connect/connectors`.
+wallet. Connector helpers live at `@topazdex/id-connect/connectors`; the chains
+come from your wagmi config.
 
 ```ts
-import { topazIdWallet, TOPAZ_ID_CHAIN } from "@topazdex/id-connect/connectors";
+import { topazIdWallet } from "@topazdex/id-connect/connectors";
+import { bsc, base } from "@topazdex/id-connect/chains";
 import { connectorsForWallets } from "@rainbow-me/rainbowkit";
 import { createConfig, http } from "wagmi";
 
@@ -147,8 +158,8 @@ const connectors = connectorsForWallets(
 );
 
 export const wagmiConfig = createConfig({
-  chains: [TOPAZ_ID_CHAIN], // BNB Chain (56)
-  transports: { [TOPAZ_ID_CHAIN.id]: http() },
+  chains: [bsc, base], // Topaz ID connects on bsc; the user can switch to base
+  transports: { [bsc.id]: http(), [base.id]: http() },
   connectors,
   ssr: true,
 });
@@ -157,6 +168,9 @@ export const wagmiConfig = createConfig({
 `"Topaz ID"` now appears in the RainbowKit picker. Selecting it opens a Topaz ID
 consent window where the user signs in — no new wallet is created.
 
+> RainbowKit's `connectorsForWallets` requires a WalletConnect (Reown) project id
+> even though the Topaz ID connector never touches WalletConnect.
+>
 > The `@topazdex/id-connect/rainbow-kit` subpath still works as a deprecated alias
 > of `/connectors`, so existing imports keep compiling. New code should use
 > `/connectors`.
@@ -164,24 +178,62 @@ consent window where the user signs in — no new wallet is created.
 ## Plain wagmi (no RainbowKit)
 
 ```ts
-import { topazIdConnector, TOPAZ_ID_CHAIN } from "@topazdex/id-connect/connectors";
+import { topazIdConnector } from "@topazdex/id-connect/connectors";
+import { TOPAZ_ID_CHAINS } from "@topazdex/id-connect/chains";
 import { createConfig, http } from "wagmi";
 
 export const wagmiConfig = createConfig({
-  chains: [TOPAZ_ID_CHAIN],
-  transports: { [TOPAZ_ID_CHAIN.id]: http() },
+  chains: TOPAZ_ID_CHAINS, // or any subset, e.g. [arc]
+  transports: Object.fromEntries(TOPAZ_ID_CHAINS.map((chain) => [chain.id, http()])),
   connectors: [topazIdConnector()],
   ssr: true,
 });
 ```
 
-## Using the wallet
+## Without wagmi (any framework)
 
-For the smoothest smart-wallet UX, use the high-level Topaz ID client instead of
-hand-rolling provider RPC calls. It exposes `sendTransaction`, `sendCalls`, and
-`writeContract`, and hides Topaz smart-wallet details such as
-`privy_sendSmartWalletTx`, native BNB value formatting, and approval+action
-batching.
+`@topazdex/id-connect/provider` gives you a Topaz ID EIP-1193 provider with no
+wagmi, React Query, or RainbowKit: reads go to the chain's RPC, wallet methods
+open the Topaz ID consent popup, and chain switches are limited to the chains you
+configure. Pair it with the [action client](#sending-transactions).
+
+```ts
+import {
+  createTopazIdProvider,
+  connectTopazId,
+  disconnectTopazId,
+} from "@topazdex/id-connect/provider";
+import { createTopazIdClient } from "@topazdex/id-connect/actions";
+import { robinhood, arc } from "@topazdex/id-connect/chains";
+
+const provider = createTopazIdProvider({ chains: [robinhood, arc] });
+
+// From a click handler (the consent popup needs a user gesture):
+const { account, chainId } = await connectTopazId(provider);
+const topazClient = await createTopazIdClient({ provider, account, chainId });
+
+const hash = await topazClient.sendTransaction({ to, data, value });
+const receipt = await topazClient.waitForReceipt(hash);
+
+// Later:
+await disconnectTopazId(provider);
+```
+
+`connectTopazId` returns without a popup when a session is already connected, so
+call it on page load to restore one (check `eth_accounts` first if you only want to
+restore, never prompt). It also accepts `{ chainId }` to switch right after
+sign-in. The provider emits standard `accountsChanged`, `chainChanged`, and
+`disconnect` events; `provider.request({ method: "wallet_switchEthereumChain" })`
+switches among your configured chains and rejects any other with EIP-1193 code
+`4902`. The provider also works as a viem transport: `custom(provider)`.
+
+## Sending transactions
+
+Use the high-level Topaz ID client for every send instead of hand-rolling
+provider RPC calls. It exposes `sendTransaction`, `sendCalls`, `writeContract`,
+and `waitForReceipt`, and hides the smart-wallet details:
+`privy_sendSmartWalletTx`, native value formatting, approval+action batching, and
+UserOperation receipt resolution.
 
 ```tsx
 import { useTopazIdClient } from "@topazdex/id-connect/react";
@@ -219,40 +271,34 @@ const { data: topazClient } = useTopazIdClient();
 
 const hash = topazClient
   ? await topazClient.sendTransaction({ to, value }) // Topaz ID smart wallet
-  : await sendTransactionAsync({ to, value, chainId: 56 }); // any other wallet
+  : await sendTransactionAsync({ to, value }); // any other wallet
 ```
 
 Pass `useTopazIdClient({ appId })` when your connector was configured with a
 custom app id.
 
-Framework-agnostic apps can use the action client directly with any EIP-1193-ish
-provider:
+Outside React, `createTopazIdClient` takes any Topaz ID provider — one from
+`createTopazIdProvider`, or a wagmi connector client:
 
 ```ts
 import { createTopazIdClient } from "@topazdex/id-connect/actions";
 
-const topazClient = await createTopazIdClient({
-  provider,
-  account,
-  chainId: 56,
-});
-
+const topazClient = await createTopazIdClient({ provider, account, chainId });
 await topazClient.sendCalls({ calls: [approvalCall, swapCall] });
 ```
 
-Plain object literals work for every call; the optional `txCall(...)` /
-`contractCall(...)` builders do the same thing but validate the target address
-eagerly, so a typo fails before a consent popup ever opens.
+`chainId` defaults to the provider's current chain. Plain object literals work
+for every call; the optional `txCall(...)` / `contractCall(...)` builders do the
+same thing but validate the target address eagerly, so a typo fails before a
+consent popup ever opens.
 
-The client is the recommended path for **every** send. A native `value` **must**
-go through it: wagmi hex-encodes `value` and the Topaz ID popup rejects hex
-quantity strings — that mismatch is why value-bearing transactions fail with a
-"can't estimate cost" popup on raw connector integrations. Zero-value calls
-(approvals, most contract writes) _can_ still go through plain wagmi
-(`useSendTransaction` / `useWriteContract`), but routing everything through the
-client keeps a single code path and sidesteps the encoding pitfall. If a contract
-write reverts unexpectedly on plain wagmi, switch it to the client before
-debugging further.
+The client is the required path for anything with a native `value`: wagmi
+hex-encodes `value` and the Topaz ID popup rejects hex quantity strings — that
+mismatch is why value-bearing transactions fail with a "can't estimate cost"
+popup on raw connector integrations. Zero-value calls (approvals, most contract
+writes) _can_ still go through plain wagmi, but routing everything through the
+client keeps one code path. If a contract write reverts unexpectedly on plain
+wagmi, switch it to the client before debugging further.
 
 A few rules keep transactions routing through the smart wallet reliably:
 
@@ -265,41 +311,119 @@ A few rules keep transactions routing through the smart wallet reliably:
   block the popup — a send fired after a long `await` chain can be popup-blocked.
   Prefer batching an approval + action into one `sendCalls` bundle: one popup, one
   approval, atomic execution.
-- **Pass native `value` as a `bigint` and let the SDK format it.** The popup
-  expects a plain JSON number and rejects hex. Above 2^53−1 wei (~0.009 BNB) the
-  conversion can round by sub-1000-wei dust — economically negligible, and round
-  amounts (0.1 / 1 / 10 BNB) are exactly representable. Don't pre-encode `value`
-  yourself.
+- **Pass native `value` as a `bigint` and let the SDK format it.** See
+  [Native value precision](#native-value-precision) for amounts above ~0.009 of
+  the native currency.
 - **`sendCalls` degrades gracefully.** It submits one atomic bundle; if the
   wallet rejects the bundle, the SDK retries the calls sequentially (one consent
   popup per call) and returns the last call's hash. Pass `atomicRequired: true`
   to get the batch error instead of the fallback.
-- **Treat receipt lookups as best-effort.** The returned hash is usually a
-  transaction hash, but some smart-wallet flows return an id that
-  `eth_getTransactionReceipt` cannot resolve. Use `client.waitForReceipt(hash)`
-  (or `waitForTopazIdReceipt({ provider, hash })` outside React) — it polls with a
-  timeout and resolves to `null` instead of hanging. On `null`, fall back to
-  re-reading your app state (balances, allowances) rather than blocking the UI on
-  the receipt alone.
+- **Confirm with `waitForReceipt`, not a plain receipt lookup.** See
+  [Confirming a transaction](#confirming-a-transaction).
 
-The connected account is a **smart contract wallet** (Kernel/ZeroDev on BNB Chain),
-which differs from a plain EOA in two ways worth knowing:
+### Switching chains
 
-- **Sends are UserOperations relayed through Topaz ID.** `sendTransaction` /
-  `writeContract` are submitted via Topaz ID's bundler + paymaster — gas is
-  sponsored by Topaz ID's paymaster policy (so the user typically needs no BNB for
-  gas), and multiple calls (e.g. `approve` + swap) can batch into a single atomic
-  action.
-- **Signatures are ERC-1271 / ERC-6492, not ECDSA.** `personal_sign` and
-  `eth_signTypedData_v4` (wagmi's `useSignMessage` / `useSignTypedData`) return a
-  contract signature. If your backend verifies signatures (e.g. SIWE), use an
-  ERC-1271/6492-aware check — `viem`'s `verifyMessage` / `verifyTypedData` with a
-  BNB Chain public client — **not** `ecrecover`.
+The client is bound to one chain (`client.chainId`). With wagmi, switch with
+`useSwitchChain` as for any wallet; `useTopazIdClient` re-creates the client for
+the new chain. Without wagmi, send `wallet_switchEthereumChain` to the provider
+and create a new client with the new `chainId`. Only chains you configured are
+switchable; a switch to any other chain rejects with code `4902`.
 
-> Need the **Legacy** signer EOA instead of the **Smart** wallet? Pass
-> `{ smartWalletMode: false }` to `topazIdConnector()`, `topazIdWallet()`, or
-> `TopazIdProvider`. That address is signer-only — not where the user holds funds.
-> See [Smart vs Legacy wallets](#smart-vs-legacy-wallets).
+### Gas and funding
+
+Gas sponsorship is per chain. `TOPAZ_ID_CHAIN_INFO` (root entry) and
+`client.getCapabilities().sponsored` tell you which case you are in:
+
+- **BNB Chain** — gas is paid by Topaz ID's paymaster. Users need funds only for
+  the `value` they send.
+- **Robinhood Chain, Base, Ethereum, Arc** — the smart wallet pays its own gas
+  from its native balance (ETH, or USDC on Arc). A fresh wallet on these chains
+  holds nothing: tell the user to fund the connected address, and check the
+  balance covers `value` plus a gas margin before opening the popup. The popup
+  reports a failed gas estimate, but a pre-check gives a clearer message.
+
+```ts
+import { TOPAZ_ID_CHAIN_INFO, isTopazIdGasSponsored } from "@topazdex/id-connect";
+
+if (!isTopazIdGasSponsored(chainId)) {
+  const balance = await publicClient.getBalance({ address: account });
+  if (balance <= value) {
+    const { name, nativeCurrency } = TOPAZ_ID_CHAIN_INFO[chainId];
+    throw new Error(`Fund your Topaz ID wallet with ${nativeCurrency} on ${name} for the payment and gas.`);
+  }
+}
+```
+
+The smart wallet is a fresh address distinct from the user's MetaMask/EOA, so
+their existing funds aren't there on any chain until they deposit.
+
+### Native value precision
+
+The Topaz ID popup carries `value` as a plain JSON number. Every amount up to
+2^53−1 wei is exact; above that (≈0.009 BNB/ETH, or ≈0.009 USDC on Arc where the
+native unit is 18-decimal) the conversion rounds to the nearest representable
+amount — at most a few thousand wei of dust. Round amounts (0.1 / 1 / 10) are
+always exact. That dust is economically irrelevant,
+but it matters when a contract checks `msg.value` exactly, so two helpers on
+`/actions` let you decide before the popup opens:
+
+```ts
+import { isExactTopazIdValue, roundUpTopazIdValue } from "@topazdex/id-connect/actions";
+
+// A fixed price the contract compares exactly: refuse rather than round.
+if (!isExactTopazIdValue(price)) throw new Error("Use fewer decimal places.");
+
+// A quoted fee that must not be under-paid (e.g. a LayerZero messaging fee):
+// pay the next exactly representable amount; the contract refunds the excess.
+await topazClient.sendTransaction({ to: bridge, data, value: roundUpTopazIdValue(nativeFee) });
+```
+
+### Confirming a transaction
+
+The popup returns either a transaction hash or a **UserOperation hash**, and a
+plain `eth_getTransactionReceipt` never resolves the latter. Smart-wallet sends
+also land inside a bundler transaction that can succeed while the user's
+operation inside it reverted. `client.waitForReceipt(hash)` (or
+`waitForTopazIdReceipt({ provider, hash, account })` outside React) handles
+both:
+
+- it polls the receipt and, while that stays empty, searches the ERC-4337
+  EntryPoint's logs for the operation to find the bundler transaction;
+- the returned receipt carries `userOperation: { hash, sender, success }`, and its
+  `status` reflects **the operation's** outcome (`"0x0"` when the operation
+  reverted, even if the outer transaction succeeded);
+- it resolves to `null` on timeout (default 30s) instead of hanging.
+
+```ts
+const hash = await topazClient.sendTransaction(call);
+const receipt = await topazClient.waitForReceipt(hash);
+
+if (receipt?.status === "0x1") {
+  // confirmed
+} else if (receipt) {
+  // reverted — receipt.userOperation?.success is false
+} else {
+  // unresolved within the timeout: re-read balances/allowances instead of blocking the UI
+}
+```
+
+Public RPCs cap `eth_getLogs` ranges; the log search looks back `lookbackBlocks`
+(default 250) from the first poll and is skipped if the RPC refuses it, so pass a
+`transports` entry with your own RPC for busy chains.
+
+## Signing messages
+
+`personal_sign` / `eth_signTypedData_v4` (wagmi's `useSignMessage` /
+`useSignTypedData`, or the same methods on the raw provider) return a
+**ERC-1271 / ERC-6492 contract signature**, not ECDSA. Verify with viem's
+`verifyMessage` / `verifyTypedData` / `verifySiweMessage` on a public client
+**for the chain the user signed on** — never `ecrecover`. viem resolves EOAs by
+`ecrecover`, deployed smart wallets by ERC-1271, and not-yet-deployed ones by
+ERC-6492 automatically. A wallet is deployed per chain on its first transaction
+there, so a user who has transacted on BNB Chain still signs ERC-6492 on Base
+until their first Base send; viem handles both. Verify against the smart-wallet
+address (`useAccount().address`), not the `signerAddress` from `/privy`. Sizes
+are variable — don't split into `r`/`s`/`v` or assume 65 bytes.
 
 ## Smart vs Legacy wallets
 
@@ -324,12 +448,8 @@ import {
   type TopazIdWalletMode,
 } from "@topazdex/id-connect";
 
-TOPAZ_ID_WALLET_MODES.smart;
-// → { mode: "smart",  label: "Smart",  description: "Gas-free smart wallet (recommended)" }
-TOPAZ_ID_WALLET_MODES.legacy;
-// → { mode: "legacy", label: "Legacy", description: "Your original Privy signing wallet" }
-
-// Map the connector flag to a mode (undefined/true → "smart", false → "legacy"):
+TOPAZ_ID_WALLET_MODES.smart; // { mode: "smart", label: "Smart", description: "…" }
+TOPAZ_ID_WALLET_MODES.legacy; // { mode: "legacy", label: "Legacy", description: "…" }
 topazIdWalletMode(false); // "legacy"
 ```
 
@@ -349,11 +469,14 @@ const wallets = [
 ];
 ```
 
+In Legacy mode the connector does not rewrite the sign methods, so signatures are
+plain ECDSA from the signer EOA.
+
 ## Show the user's Topaz ID profile
 
 Topaz ID owns each wallet's name, handle, and avatar. Render real identity instead
 of a bare address. Framework-agnostic helpers live at the root entry; a React Query
-hook lives at `/react`.
+hook lives at `/react`. Profiles are chain-independent.
 
 ```ts
 import { displayNameForWallet, avatarForWallet } from "@topazdex/id-connect";
@@ -364,10 +487,10 @@ const label = displayNameForWallet(profile ?? null, address);
 const avatar = avatarForWallet(profile ?? null, "/default-avatar.png");
 ```
 
-Reads are public and CORS-open. `found: false` → fall back to the address; never
-block your UI on the fetch. `fetchTopazIdProfile` returns `null` on a network or
-HTTP failure (aborts re-throw so React Query can tell a cancellation from an empty
-result).
+Reads are public and CORS-open (`GET https://id.topazdex.com/api/v1/profile/{wallet}`).
+`found: false` → fall back to the address; never block your UI on the fetch.
+`fetchTopazIdProfile` returns `null` on a network or HTTP failure (aborts re-throw
+so React Query can tell a cancellation from an empty result).
 
 ## Already using Privy?
 
@@ -411,17 +534,17 @@ const { address, signerAddress } = useTopazIdAccount();
 ```
 
 `address` is `undefined` until the user's smart wallet is provisioned and linked, so
-guard on it with a loading state before rendering or transacting. If you display
-both, label them **Smart** (`address`) and **Legacy** (`signerAddress`) — see
-[Smart vs Legacy wallets](#smart-vs-legacy-wallets).
+guard on it with a loading state before rendering or transacting.
 
 ## Exports
 
 | Entry | Contents |
 | --- | --- |
-| `@topazdex/id-connect` | `TOPAZ_ID_APP_ID`, `TOPAZ_ID_CONNECTOR_ID`, `TOPAZ_ID_CHAIN_ID`, `TOPAZ_ID_NAME`, `TOPAZ_ID_ICON_URL`, `TOPAZ_ID_BASE_URL`, `TOPAZ_ID_SMART_WALLET_LABEL`, `TOPAZ_ID_LEGACY_WALLET_LABEL`, `TOPAZ_ID_WALLET_MODES`, `topazIdWalletMode`, `TopazIdWalletMode`, `TopazIdWalletModeInfo`, `fetchTopazIdProfile`, `displayNameForWallet`, `avatarForWallet`, `shortenAddress`, `TopazIdProfile` |
-| `@topazdex/id-connect/connectors` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN`, `TopazIdConnectorOptions` |
-| `@topazdex/id-connect/actions` | `createTopazIdClient`, `waitForTopazIdReceipt`, `txCall`, `contractCall`, `isTopazIdConnectorId`, `TopazIdClient`, `TopazIdClientOptions`, `TopazIdCall`, `TopazIdContractCall`, `TopazIdSendCallsParameters`, `TopazIdCapabilities`, `TopazIdProviderLike`, `TopazIdTransactionReceipt`, `WaitForReceiptOptions`, `WaitForTopazIdReceiptParameters` |
+| `@topazdex/id-connect` | `TOPAZ_ID_APP_ID`, `TOPAZ_ID_CONNECTOR_ID`, `TOPAZ_ID_CHAIN_ID`, `TOPAZ_ID_CHAIN_IDS`, `TOPAZ_ID_CHAIN_INFO`, `isTopazIdChainId`, `isTopazIdGasSponsored`, `topazIdChainInfo`, `TOPAZ_ID_NAME`, `TOPAZ_ID_ICON_URL`, `TOPAZ_ID_BASE_URL`, `TOPAZ_ID_SMART_WALLET_LABEL`, `TOPAZ_ID_LEGACY_WALLET_LABEL`, `TOPAZ_ID_WALLET_MODES`, `topazIdWalletMode`, `fetchTopazIdProfile`, `displayNameForWallet`, `avatarForWallet`, `shortenAddress`; types `TopazIdChainId`, `TopazIdChainInfo`, `TopazIdWalletMode`, `TopazIdWalletModeInfo`, `TopazIdProfile`, `FetchTopazIdProfileOptions` |
+| `@topazdex/id-connect/chains` | `TOPAZ_ID_CHAINS`, `TOPAZ_ID_CHAIN`, `bsc`, `robinhood`, `base`, `mainnet`, `arc`, `topazIdChain` |
+| `@topazdex/id-connect/connectors` | `topazIdWallet`, `topazIdConnector`, `TOPAZ_ID_CHAIN`, `TOPAZ_ID_CHAINS`, `TopazIdConnectorOptions` |
+| `@topazdex/id-connect/provider` | `createTopazIdProvider`, `connectTopazId`, `disconnectTopazId`, `TopazIdChainNotConfiguredError`; types `TopazIdProvider`, `CreateTopazIdProviderOptions`, `ConnectTopazIdOptions`, `TopazIdConnection` |
+| `@topazdex/id-connect/actions` | `createTopazIdClient`, `waitForTopazIdReceipt`, `isExactTopazIdValue`, `roundUpTopazIdValue`, `txCall`, `contractCall`, `isTopazIdConnectorId`, `ENTRY_POINT_ADDRESSES`, `USER_OPERATION_EVENT_TOPIC`; types `TopazIdClient`, `TopazIdClientOptions`, `TopazIdCall`, `TopazIdContractCall`, `TopazIdSendCallsParameters`, `TopazIdCapabilities`, `TopazIdProviderLike`, `TopazIdTransactionReceipt`, `TopazIdUserOperation`, `TopazIdLog`, `WaitForReceiptOptions`, `WaitForTopazIdReceiptParameters` |
 | `@topazdex/id-connect/rainbow-kit` | *Deprecated alias of `/connectors`* |
 | `@topazdex/id-connect/react` | `TopazIdProvider`, `useTopazIdLogin`, `useTopazIdClient`, `useTopazIdProfile` |
 | `@topazdex/id-connect/privy` | `TopazIdPrivyProvider`, `useTopazIdCrossAppLogin`, `useTopazIdAccount`, `topazIdLoginMethod` |
@@ -432,12 +555,35 @@ All peers are optional; install only what your entrypoints use.
 
 | You use | Install |
 | --- | --- |
-| Profile helpers only (`@topazdex/id-connect`) | nothing extra |
-| `TopazIdProvider` / `useTopazIdLogin` / `useTopazIdClient` (`/react`) | `wagmi`, `viem`, `@tanstack/react-query`, `react`, `@privy-io/cross-app-connect` |
+| Constants + profile helpers only (`@topazdex/id-connect`) | nothing extra |
+| Chain objects (`/chains`) or the action client (`/actions`) | `viem` |
+| Framework-free provider (`/provider`) | `@privy-io/cross-app-connect`, `viem` |
 | Connectors (`/connectors`) | `@privy-io/cross-app-connect`, `viem`, `wagmi` (+ `@rainbow-me/rainbowkit` for `topazIdWallet`) |
-| Action client (`/actions`) | `viem` |
+| `TopazIdProvider` / `useTopazIdLogin` / `useTopazIdClient` (`/react`) | `wagmi`, `viem`, `@tanstack/react-query`, `react`, `@privy-io/cross-app-connect` |
 | `useTopazIdProfile` only (`/react`) | `@tanstack/react-query`, `react` |
 | Privy cross-app (`/privy`) | `@privy-io/react-auth`, `react` |
+
+## Upgrade notes
+
+Pre-1.0: a minor bump is the feature bump, and `^0.x` consumers don't cross a
+minor automatically (`^0.4.3` excludes `0.5.0`) — upgrade deliberately. Every
+release is additive; existing imports keep working.
+
+- **0.5** — multichain. New `/chains` and `/provider` entries; `TopazIdProvider`
+  takes `chains` + `transports` (`transport` is deprecated but still honoured for
+  BNB Chain); `useTopazIdLogin` takes `chainId`; `createTopazIdClient` defaults
+  `chainId` to the provider's chain and reports `sponsored` per chain;
+  `waitForReceipt` resolves UserOperation hashes and reports the operation's
+  outcome in `status` + `userOperation`; `isExactTopazIdValue` /
+  `roundUpTopazIdValue`. Defaults are unchanged: with no `chains`, everything is
+  still BNB Chain only.
+- **0.4** — the smart-wallet action client (`useTopazIdClient`, `/actions`) and
+  `waitForTopazIdReceipt`. If value-bearing sends failed on plain wagmi, route
+  them through the client.
+- **0.3** — smart-account-first: the connected account became the smart contract
+  wallet instead of the signer EOA. Anything keyed on the old EOA (allowlists,
+  balances) doesn't carry over; signatures became ERC-1271/6492; pass
+  `{ smartWalletMode: false }` for the Legacy signer EOA.
 
 ## Releasing
 
