@@ -14,6 +14,7 @@ import {
   useAccount,
   useConnect,
   useConnectorClient,
+  useConnectors,
   useDisconnect,
   WagmiProvider,
 } from "wagmi";
@@ -152,17 +153,19 @@ export interface UseTopazIdLoginOptions {
  * Connect/disconnect the Topaz ID wallet without touching RainbowKit's modal.
  * Locates the Topaz ID connector in your wagmi config and exposes `login`/`logout`.
  *
- * @returns `login` opens the Topaz ID consent popup; `logout` disconnects;
+ * @returns `login` opens the Topaz ID consent popup; `logout` disconnects (both
+ * take no arguments, so they can be passed straight to `onClick`);
  * `isPending`/`error` mirror wagmi's connect state; `connector` is the resolved
- * connector (or `undefined` if Topaz ID isn't configured).
+ * connector (or `undefined` if Topaz ID isn't configured). Works with wagmi 2 and 3.
  *
  * @example
  * const { login, logout } = useTopazIdLogin();
  * return <button onClick={login}>Sign in with Topaz ID</button>;
  */
 export function useTopazIdLogin(options: UseTopazIdLoginOptions = {}) {
-  const { connect, connectors, isPending, error } = useConnect();
+  const { connect, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
+  const connectors = useConnectors();
   const appId = options.appId ?? TOPAZ_ID_APP_ID;
   const chainId = options.chainId;
 
@@ -176,8 +179,9 @@ export function useTopazIdLogin(options: UseTopazIdLoginOptions = {}) {
   const login = useCallback(() => {
     if (connector) connect({ connector, ...(chainId == null ? {} : { chainId }) });
   }, [connect, connector, chainId]);
+  const logout = useCallback(() => disconnect(), [disconnect]);
 
-  return { login, logout: disconnect, connector, isPending, error };
+  return { login, logout, connector, isPending, error };
 }
 
 export interface UseTopazIdClientOptions {

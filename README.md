@@ -49,8 +49,17 @@ Add `wagmi` + `@tanstack/react-query` for the React/wagmi entries,
 your app is itself a Privy app. All peer dependencies are optional and only pulled
 in by the entrypoints that need them — see [Peer dependencies](#peer-dependencies).
 
-> `@privy-io/cross-app-connect` pins an exact `viem` version (`2.52.0` at the time
-> of writing). Match it to avoid peer warnings.
+Works with wagmi 2 or 3 and `@privy-io/cross-app-connect` 0.5 through 0.7. Two
+install-time notes:
+
+- `@privy-io/cross-app-connect` pins an **exact** `viem` version (`2.56.0` for
+  0.7.0). A newer patch of viem only produces a peer warning and works; pin
+  `viem` to the requested version if you want a clean install.
+- **Yarn 4.17+** refuses any version published in the last 24 hours
+  (`npmMinimalAgeGate`), so right after a release `yarn add` reports the version
+  as "quarantined" and keeps the previous one. Wait a day, or add
+  `@topazdex/id-connect` to `npmPreapprovedPackages` in `.yarnrc.yml`.
+- RainbowKit 2.x supports wagmi 2 only; the RainbowKit path needs `wagmi@2`.
 
 ## Pick an integration path
 
@@ -559,7 +568,7 @@ All peers are optional; install only what your entrypoints use.
 | Chain objects (`/chains`) or the action client (`/actions`) | `viem` |
 | Framework-free provider (`/provider`) | `@privy-io/cross-app-connect`, `viem` |
 | Connectors (`/connectors`) | `@privy-io/cross-app-connect`, `viem`, `wagmi` (+ `@rainbow-me/rainbowkit` for `topazIdWallet`) |
-| `TopazIdProvider` / `useTopazIdLogin` / `useTopazIdClient` (`/react`) | `wagmi`, `viem`, `@tanstack/react-query`, `react`, `@privy-io/cross-app-connect` |
+| `TopazIdProvider` / `useTopazIdLogin` / `useTopazIdClient` (`/react`) | `wagmi` (2 or 3), `viem`, `@tanstack/react-query`, `react`, `@privy-io/cross-app-connect` |
 | `useTopazIdProfile` only (`/react`) | `@tanstack/react-query`, `react` |
 | Privy cross-app (`/privy`) | `@privy-io/react-auth`, `react` |
 
@@ -569,6 +578,9 @@ Pre-1.0: a minor bump is the feature bump, and `^0.x` consumers don't cross a
 minor automatically (`^0.4.3` excludes `0.5.0`) — upgrade deliberately. Every
 release is additive; existing imports keep working.
 
+- **0.5.1** — wagmi 3 and `@privy-io/cross-app-connect` 0.6/0.7 accepted as
+  peers (both verified); `useTopazIdLogin().logout` takes no arguments, so
+  `onClick={logout}` type-checks.
 - **0.5** — multichain. New `/chains` and `/provider` entries; `TopazIdProvider`
   takes `chains` + `transports` (`transport` is deprecated but still honoured for
   BNB Chain); `useTopazIdLogin` takes `chainId`; `createTopazIdClient` defaults
