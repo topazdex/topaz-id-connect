@@ -16,6 +16,9 @@
       "connectors": [
         "./dist/connectors.d.ts"
       ],
+      "provider": [
+        "./dist/provider.d.ts"
+      ],
       "actions": [
         "./dist/actions.d.ts"
       ],
@@ -90,6 +93,16 @@
       "require": {
         "types": "./dist/connectors.d.cts",
         "default": "./dist/connectors.cjs"
+      }
+    },
+    "./provider": {
+      "import": {
+        "types": "./dist/provider.d.ts",
+        "default": "./dist/provider.js"
+      },
+      "require": {
+        "types": "./dist/provider.d.cts",
+        "default": "./dist/provider.cjs"
       }
     },
     "./actions": {
